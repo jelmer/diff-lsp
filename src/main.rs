@@ -12,6 +12,7 @@ mod document_links;
 mod folding;
 mod highlights;
 mod hover;
+mod inlay_hints;
 mod position;
 mod selection_ranges;
 mod semantic;
@@ -63,6 +64,7 @@ impl LanguageServer for Backend {
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_highlight_provider: Some(OneOf::Left(true)),
+                inlay_hint_provider: Some(OneOf::Left(true)),
                 document_link_provider: Some(DocumentLinkOptions {
                     resolve_provider: Some(false),
                     work_done_progress_options: Default::default(),
@@ -171,6 +173,26 @@ impl LanguageServer for Backend {
         drop(files);
 
         Ok(Some(DocumentSymbolResponse::Nested(syms)))
+    }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let uri = &params.text_document.uri;
+        let range = params.range;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let patch = file_info.parsed.tree_lossy();
+        let hints = inlay_hints::get_inlay_hints(&patch, &file_info.text, range);
+        drop(files);
+
+        if hints.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(hints))
+        }
     }
 
     async fn document_highlight(
