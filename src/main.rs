@@ -12,6 +12,7 @@ mod document_links;
 mod folding;
 mod hover;
 mod position;
+mod selection_ranges;
 mod semantic;
 mod symbols;
 
@@ -66,6 +67,7 @@ impl LanguageServer for Backend {
                 }),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 semantic_tokens_provider: Some(
                     SemanticTokensServerCapabilities::SemanticTokensOptions(
                         SemanticTokensOptions {
@@ -223,6 +225,25 @@ impl LanguageServer for Backend {
             result_id: None,
             data: tokens,
         })))
+    }
+
+    async fn selection_range(
+        &self,
+        params: SelectionRangeParams,
+    ) -> Result<Option<Vec<SelectionRange>>> {
+        let uri = &params.text_document.uri;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let patch = file_info.parsed.tree_lossy();
+        let ranges =
+            selection_ranges::get_selection_ranges(&patch, &file_info.text, &params.positions);
+        drop(files);
+
+        Ok(Some(ranges))
     }
 }
 
