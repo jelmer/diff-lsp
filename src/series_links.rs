@@ -4,7 +4,6 @@
 //! directory (typically `debian/patches/`).
 
 use patchkit::edit::series::SeriesFile;
-use rowan::ast::AstNode;
 use tower_lsp_server::ls_types::*;
 
 use crate::position::text_range_to_lsp_range;

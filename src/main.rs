@@ -18,16 +18,31 @@ mod inlay_hints;
 mod position;
 mod selection_ranges;
 mod semantic;
+mod series_links;
 mod symbols;
 
 use position::try_lsp_range_to_text_range;
+
+/// Parsed content for an open file.
+enum ParsedFile {
+    /// A patch/diff file.
+    Patch(patchkit::edit::Parse<patchkit::edit::Patch>),
+    /// A quilt series file.
+    Series(patchkit::edit::Parse<patchkit::edit::series::SeriesFile>),
+}
 
 /// Information about an open file.
 struct FileInfo {
     /// The current source text.
     text: String,
-    /// The parsed patch (green node for thread safety).
-    parsed: patchkit::edit::Parse<patchkit::edit::Patch>,
+    /// The parsed content.
+    parsed: ParsedFile,
+}
+
+/// Detect whether a URI refers to a series file.
+fn is_series_file(uri: &Uri) -> bool {
+    let path = uri.path().as_str();
+    path.ends_with("/series") || path.ends_with("/series.conf")
 }
 
 struct Backend {
@@ -44,16 +59,32 @@ impl Backend {
     }
 
     async fn update_file(&self, uri: Uri, text: String) {
-        let parsed = patchkit::edit::parse(&text);
-        let diagnostics = diagnostics::get_diagnostics(&text, &parsed);
+        let (parsed, diags) = if is_series_file(&uri) {
+            let parsed = patchkit::edit::series::parse(&text);
+            let diags: Vec<Diagnostic> = parsed
+                .positioned_errors()
+                .iter()
+                .map(|e| Diagnostic {
+                    range: position::text_range_to_lsp_range(&text, e.position),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: Some(NumberOrString::String("parse-error".to_string())),
+                    source: Some("diff-lsp".to_string()),
+                    message: e.message.clone(),
+                    ..Default::default()
+                })
+                .collect();
+            (ParsedFile::Series(parsed), diags)
+        } else {
+            let parsed = patchkit::edit::parse(&text);
+            let diags = diagnostics::get_diagnostics(&text, &parsed);
+            (ParsedFile::Patch(parsed), diags)
+        };
 
         let mut files = self.files.lock().await;
         files.insert(uri.clone(), FileInfo { text, parsed });
         drop(files);
 
-        self.client
-            .publish_diagnostics(uri, diagnostics, None)
-            .await;
+        self.client.publish_diagnostics(uri, diags, None).await;
     }
 }
 
@@ -156,11 +187,16 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let ranges = folding::generate_folding_ranges(&patch, &file_info.text);
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                Some(folding::generate_folding_ranges(&patch, &file_info.text))
+            }
+            ParsedFile::Series(_) => None,
+        };
         drop(files);
 
-        Ok(Some(ranges))
+        Ok(result)
     }
 
     async fn document_symbol(
@@ -174,11 +210,18 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let syms = symbols::generate_document_symbols(&patch, &file_info.text);
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                Some(DocumentSymbolResponse::Nested(
+                    symbols::generate_document_symbols(&patch, &file_info.text),
+                ))
+            }
+            ParsedFile::Series(_) => None,
+        };
         drop(files);
 
-        Ok(Some(DocumentSymbolResponse::Nested(syms)))
+        Ok(result)
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
@@ -189,15 +232,21 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let lenses = code_lenses::get_code_lenses(&patch, &file_info.text);
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                let lenses = code_lenses::get_code_lenses(&patch, &file_info.text);
+                if lenses.is_empty() {
+                    None
+                } else {
+                    Some(lenses)
+                }
+            }
+            ParsedFile::Series(_) => None,
+        };
         drop(files);
 
-        if lenses.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(lenses))
-        }
+        Ok(result)
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
@@ -209,20 +258,26 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let actions = code_actions::get_code_actions(&patch, &file_info.text, range, uri);
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                let actions = code_actions::get_code_actions(&patch, &file_info.text, range, uri);
+                if actions.is_empty() {
+                    None
+                } else {
+                    Some(
+                        actions
+                            .into_iter()
+                            .map(CodeActionOrCommand::CodeAction)
+                            .collect(),
+                    )
+                }
+            }
+            ParsedFile::Series(_) => None,
+        };
         drop(files);
 
-        if actions.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(
-                actions
-                    .into_iter()
-                    .map(CodeActionOrCommand::CodeAction)
-                    .collect(),
-            ))
-        }
+        Ok(result)
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
@@ -234,15 +289,21 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let hints = inlay_hints::get_inlay_hints(&patch, &file_info.text, range);
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                let hints = inlay_hints::get_inlay_hints(&patch, &file_info.text, range);
+                if hints.is_empty() {
+                    None
+                } else {
+                    Some(hints)
+                }
+            }
+            ParsedFile::Series(_) => None,
+        };
         drop(files);
 
-        if hints.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(hints))
-        }
+        Ok(result)
     }
 
     async fn document_highlight(
@@ -257,15 +318,21 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let hl = highlights::get_highlights(&patch, &file_info.text, position);
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                let hl = highlights::get_highlights(&patch, &file_info.text, position);
+                if hl.is_empty() {
+                    None
+                } else {
+                    Some(hl)
+                }
+            }
+            ParsedFile::Series(_) => None,
+        };
         drop(files);
 
-        if hl.is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(hl))
-        }
+        Ok(result)
     }
 
     async fn document_link(&self, params: DocumentLinkParams) -> Result<Option<Vec<DocumentLink>>> {
@@ -276,8 +343,16 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let links = document_links::get_document_links(&patch, &file_info.text, uri);
+        let links = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                document_links::get_document_links(&patch, &file_info.text, uri)
+            }
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                series_links::get_document_links(&series, &file_info.text, uri)
+            }
+        };
         drop(files);
 
         if links.is_empty() {
@@ -296,8 +371,13 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let result = hover::get_hover(&patch, &file_info.text, position);
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                hover::get_hover(&patch, &file_info.text, position)
+            }
+            ParsedFile::Series(_) => None,
+        };
         drop(files);
 
         Ok(result)
@@ -314,14 +394,20 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let tokens = semantic::generate_semantic_tokens(&patch, &file_info.text);
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                let tokens = semantic::generate_semantic_tokens(&patch, &file_info.text);
+                Some(SemanticTokensResult::Tokens(SemanticTokens {
+                    result_id: None,
+                    data: tokens,
+                }))
+            }
+            ParsedFile::Series(_) => None,
+        };
         drop(files);
 
-        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-            result_id: None,
-            data: tokens,
-        })))
+        Ok(result)
     }
 
     async fn selection_range(
@@ -335,12 +421,20 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree();
-        let ranges =
-            selection_ranges::get_selection_ranges(&patch, &file_info.text, &params.positions);
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                Some(selection_ranges::get_selection_ranges(
+                    &patch,
+                    &file_info.text,
+                    &params.positions,
+                ))
+            }
+            ParsedFile::Series(_) => None,
+        };
         drop(files);
 
-        Ok(Some(ranges))
+        Ok(result)
     }
 }
 
