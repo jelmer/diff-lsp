@@ -10,6 +10,7 @@ use tower_lsp_server::{Client, LanguageServer, LspService, Server};
 mod diagnostics;
 mod document_links;
 mod folding;
+mod highlights;
 mod hover;
 mod position;
 mod selection_ranges;
@@ -61,6 +62,7 @@ impl LanguageServer for Backend {
                     TextDocumentSyncKind::INCREMENTAL,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                document_highlight_provider: Some(OneOf::Left(true)),
                 document_link_provider: Some(DocumentLinkOptions {
                     resolve_provider: Some(false),
                     work_done_progress_options: Default::default(),
@@ -169,6 +171,29 @@ impl LanguageServer for Backend {
         drop(files);
 
         Ok(Some(DocumentSymbolResponse::Nested(syms)))
+    }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let patch = file_info.parsed.tree_lossy();
+        let hl = highlights::get_highlights(&patch, &file_info.text, position);
+        drop(files);
+
+        if hl.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(hl))
+        }
     }
 
     async fn document_link(&self, params: DocumentLinkParams) -> Result<Option<Vec<DocumentLink>>> {
