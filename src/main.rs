@@ -8,6 +8,7 @@ use tower_lsp_server::ls_types::*;
 use tower_lsp_server::{Client, LanguageServer, LspService, Server};
 
 mod diagnostics;
+mod document_links;
 mod folding;
 mod hover;
 mod position;
@@ -59,6 +60,10 @@ impl LanguageServer for Backend {
                     TextDocumentSyncKind::INCREMENTAL,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                document_link_provider: Some(DocumentLinkOptions {
+                    resolve_provider: Some(false),
+                    work_done_progress_options: Default::default(),
+                }),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(
@@ -162,6 +167,25 @@ impl LanguageServer for Backend {
         drop(files);
 
         Ok(Some(DocumentSymbolResponse::Nested(syms)))
+    }
+
+    async fn document_link(&self, params: DocumentLinkParams) -> Result<Option<Vec<DocumentLink>>> {
+        let uri = &params.text_document.uri;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let patch = file_info.parsed.tree_lossy();
+        let links = document_links::get_document_links(&patch, &file_info.text, uri);
+        drop(files);
+
+        if links.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(links))
+        }
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
