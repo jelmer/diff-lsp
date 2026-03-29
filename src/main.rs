@@ -19,6 +19,7 @@ mod inlay_hints;
 mod position;
 mod selection_ranges;
 mod semantic;
+mod series_diagnostics;
 mod series_links;
 mod symbols;
 
@@ -57,7 +58,7 @@ impl Backend {
     async fn update_file(&self, uri: Uri, text: String) {
         let (parsed, diags) = if detection::detect_file_kind(&uri) == FileKind::Series {
             let parsed = patchkit::edit::series::parse(&text);
-            let diags: Vec<Diagnostic> = parsed
+            let mut diags: Vec<Diagnostic> = parsed
                 .positioned_errors()
                 .iter()
                 .map(|e| Diagnostic {
@@ -69,6 +70,10 @@ impl Backend {
                     ..Default::default()
                 })
                 .collect();
+            let series = parsed.tree();
+            diags.extend(series_diagnostics::get_series_diagnostics(
+                &text, &series, &uri,
+            ));
             (ParsedFile::Series(parsed), diags)
         } else {
             let parsed = patchkit::edit::parse(&text);
