@@ -9,6 +9,7 @@ use tower_lsp_server::{Client, LanguageServer, LspService, Server};
 
 mod code_actions;
 mod code_lenses;
+mod detection;
 mod diagnostics;
 mod document_links;
 mod folding;
@@ -21,6 +22,7 @@ mod semantic;
 mod series_links;
 mod symbols;
 
+use detection::FileKind;
 use position::try_lsp_range_to_text_range;
 
 /// Parsed content for an open file.
@@ -39,12 +41,6 @@ struct FileInfo {
     parsed: ParsedFile,
 }
 
-/// Detect whether a URI refers to a series file.
-fn is_series_file(uri: &Uri) -> bool {
-    let path = uri.path().as_str();
-    path.ends_with("/series") || path.ends_with("/series.conf")
-}
-
 struct Backend {
     client: Client,
     files: Arc<Mutex<HashMap<Uri, FileInfo>>>,
@@ -59,7 +55,7 @@ impl Backend {
     }
 
     async fn update_file(&self, uri: Uri, text: String) {
-        let (parsed, diags) = if is_series_file(&uri) {
+        let (parsed, diags) = if detection::detect_file_kind(&uri) == FileKind::Series {
             let parsed = patchkit::edit::series::parse(&text);
             let diags: Vec<Diagnostic> = parsed
                 .positioned_errors()

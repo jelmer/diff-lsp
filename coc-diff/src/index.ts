@@ -54,9 +54,12 @@ export async function activate(context: ExtensionContext): Promise<void> {
       { scheme: 'file', pattern: '**/*.diff' },
       { scheme: 'file', pattern: '**/series' },
       { scheme: 'file', pattern: '**/series.conf' },
+      { scheme: 'file', pattern: '**/patches/**' },
     ],
     synchronize: {
-      fileEvents: workspace.createFileSystemWatcher('**/*.{patch,diff,series,series.conf}')
+      fileEvents: workspace.createFileSystemWatcher(
+        '**/{*.patch,*.diff,series,series.conf,patches/**}'
+      )
     }
   };
 
