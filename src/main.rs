@@ -19,6 +19,7 @@ mod inlay_hints;
 mod position;
 mod selection_ranges;
 mod semantic;
+mod series_code_lenses;
 mod series_diagnostics;
 mod series_links;
 mod symbols;
@@ -243,7 +244,16 @@ impl LanguageServer for Backend {
                     Some(lenses)
                 }
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                let lenses =
+                    series_code_lenses::get_series_code_lenses(&series, &file_info.text, uri);
+                if lenses.is_empty() {
+                    None
+                } else {
+                    Some(lenses)
+                }
+            }
         };
         drop(files);
 
