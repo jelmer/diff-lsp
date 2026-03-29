@@ -35,10 +35,7 @@ fn add_patch_file_range(ranges: &mut Vec<FoldingRange>, file: &PatchFile, text: 
             end_line: end.line,
             end_character: Some(end.character),
             kind: Some(FoldingRangeKind::Region),
-            collapsed_text: file
-                .old_file()
-                .and_then(|f| f.path())
-                .map(|p| p.text().to_string()),
+            collapsed_text: file.path(),
         });
     }
 }
