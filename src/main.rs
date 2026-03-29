@@ -10,6 +10,7 @@ use tower_lsp_server::{Client, LanguageServer, LspService, Server};
 mod diagnostics;
 mod folding;
 mod position;
+mod semantic;
 mod symbols;
 
 use position::try_lsp_range_to_text_range;
@@ -58,6 +59,25 @@ impl LanguageServer for Backend {
                 )),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            work_done_progress_options: WorkDoneProgressOptions::default(),
+                            legend: SemanticTokensLegend {
+                                token_types: vec![
+                                    SemanticTokenType::new("diffFileHeader"),
+                                    SemanticTokenType::new("diffHunkHeader"),
+                                    SemanticTokenType::new("diffAddedLine"),
+                                    SemanticTokenType::new("diffDeletedLine"),
+                                    SemanticTokenType::new("diffContextLine"),
+                                ],
+                                token_modifiers: vec![],
+                            },
+                            range: Some(false),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                        },
+                    ),
+                ),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -140,6 +160,27 @@ impl LanguageServer for Backend {
         drop(files);
 
         Ok(Some(DocumentSymbolResponse::Nested(syms)))
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = &params.text_document.uri;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let patch = file_info.parsed.tree_lossy();
+        let tokens = semantic::generate_semantic_tokens(&patch, &file_info.text);
+        drop(files);
+
+        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data: tokens,
+        })))
     }
 }
 
