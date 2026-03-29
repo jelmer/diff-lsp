@@ -9,6 +9,7 @@ use tower_lsp_server::{Client, LanguageServer, LspService, Server};
 
 mod diagnostics;
 mod folding;
+mod hover;
 mod position;
 mod semantic;
 mod symbols;
@@ -57,6 +58,7 @@ impl LanguageServer for Backend {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::INCREMENTAL,
                 )),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 semantic_tokens_provider: Some(
@@ -160,6 +162,22 @@ impl LanguageServer for Backend {
         drop(files);
 
         Ok(Some(DocumentSymbolResponse::Nested(syms)))
+    }
+
+    async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let patch = file_info.parsed.tree_lossy();
+        let result = hover::get_hover(&patch, &file_info.text, position);
+        drop(files);
+
+        Ok(result)
     }
 
     async fn semantic_tokens_full(
