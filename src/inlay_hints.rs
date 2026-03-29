@@ -66,7 +66,7 @@ mod tests {
 
     fn parse_and_hint(text: &str) -> Vec<InlayHint> {
         let parsed = patchkit::edit::parse(text);
-        let patch = parsed.tree_lossy();
+        let patch = parsed.tree();
         let range = Range::new(Position::new(0, 0), Position::new(1000, 0));
         get_inlay_hints(&patch, text, range)
     }
@@ -145,7 +145,7 @@ mod tests {
 +d
 ";
         let parsed = patchkit::edit::parse(text);
-        let patch = parsed.tree_lossy();
+        let patch = parsed.tree();
 
         // Request only the first few lines
         let range = Range::new(Position::new(0, 0), Position::new(4, 0));

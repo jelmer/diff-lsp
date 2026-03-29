@@ -27,7 +27,7 @@ fn make_diagnostic(
 pub fn get_diagnostics(source_text: &str, parsed: &Parse<Patch>) -> Vec<Diagnostic> {
     let mut diagnostics = parse_error_diagnostics(source_text, parsed);
 
-    let patch = parsed.tree_lossy();
+    let patch = parsed.tree();
     diagnostics.extend(check_hunk_line_counts(source_text, &patch));
     diagnostics.extend(check_duplicate_file_paths(source_text, &patch));
     diagnostics.extend(check_missing_file_headers(source_text, &patch));

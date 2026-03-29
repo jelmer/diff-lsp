@@ -48,7 +48,7 @@ mod tests {
 
     fn parse_and_lenses(text: &str) -> Vec<CodeLens> {
         let parsed = patchkit::edit::parse(text);
-        let patch = parsed.tree_lossy();
+        let patch = parsed.tree();
         get_code_lenses(&patch, text)
     }
 

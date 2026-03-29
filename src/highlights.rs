@@ -91,7 +91,7 @@ mod tests {
 
     fn parse_and_highlight(text: &str, line: u32, character: u32) -> Vec<DocumentHighlight> {
         let parsed = patchkit::edit::parse(text);
-        let patch = parsed.tree_lossy();
+        let patch = parsed.tree();
         get_highlights(&patch, text, Position::new(line, character))
     }
 

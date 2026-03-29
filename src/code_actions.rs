@@ -68,7 +68,7 @@ pub fn get_code_actions(
 
                     // Re-parse to get a mutable copy, find the same hunk, fix it
                     let reparsed = patchkit::edit::parse(source_text);
-                    let fixed_patch = reparsed.tree_lossy();
+                    let fixed_patch = reparsed.tree();
                     // Walk to the matching hunk by text range
                     for fixed_file in fixed_patch.patch_files() {
                         for fixed_hunk in fixed_file.hunks() {
@@ -207,7 +207,7 @@ mod tests {
 
     fn parse_and_actions(text: &str, line: u32) -> Vec<CodeAction> {
         let parsed = patchkit::edit::parse(text);
-        let patch = parsed.tree_lossy();
+        let patch = parsed.tree();
         let range = Range::new(Position::new(line, 0), Position::new(line, 0));
         let uri: Uri = "file:///test.patch".parse().unwrap();
         get_code_actions(&patch, text, range, &uri)

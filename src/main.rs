@@ -156,7 +156,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let ranges = folding::generate_folding_ranges(&patch, &file_info.text);
         drop(files);
 
@@ -174,7 +174,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let syms = symbols::generate_document_symbols(&patch, &file_info.text);
         drop(files);
 
@@ -189,7 +189,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let lenses = code_lenses::get_code_lenses(&patch, &file_info.text);
         drop(files);
 
@@ -209,7 +209,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let actions = code_actions::get_code_actions(&patch, &file_info.text, range, uri);
         drop(files);
 
@@ -234,7 +234,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let hints = inlay_hints::get_inlay_hints(&patch, &file_info.text, range);
         drop(files);
 
@@ -257,7 +257,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let hl = highlights::get_highlights(&patch, &file_info.text, position);
         drop(files);
 
@@ -276,7 +276,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let links = document_links::get_document_links(&patch, &file_info.text, uri);
         drop(files);
 
@@ -296,7 +296,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let result = hover::get_hover(&patch, &file_info.text, position);
         drop(files);
 
@@ -314,7 +314,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let tokens = semantic::generate_semantic_tokens(&patch, &file_info.text);
         drop(files);
 
@@ -335,7 +335,7 @@ impl LanguageServer for Backend {
             return Ok(None);
         };
 
-        let patch = file_info.parsed.tree_lossy();
+        let patch = file_info.parsed.tree();
         let ranges =
             selection_ranges::get_selection_ranges(&patch, &file_info.text, &params.positions);
         drop(files);
