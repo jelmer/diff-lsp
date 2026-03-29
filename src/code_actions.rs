@@ -59,6 +59,53 @@ pub fn get_code_actions(
                 data: None,
             });
 
+            // "Fix hunk line counts" (only if counts are wrong)
+            if let Some(header) = hunk.header() {
+                if !header.check_counts(&hunk).is_empty() {
+                    // Clone the tree, fix in-place, extract the corrected header text
+                    let header_range = header.syntax().text_range();
+                    let lsp_header_range = text_range_to_lsp_range(source_text, header_range);
+
+                    // Re-parse to get a mutable copy, find the same hunk, fix it
+                    let reparsed = patchkit::edit::parse(source_text);
+                    let fixed_patch = reparsed.tree_lossy();
+                    // Walk to the matching hunk by text range
+                    for fixed_file in fixed_patch.patch_files() {
+                        for fixed_hunk in fixed_file.hunks() {
+                            if fixed_hunk.syntax().text_range() == hunk_range {
+                                fixed_hunk.fix_counts();
+                                let fixed_header_text =
+                                    fixed_hunk.header().unwrap().syntax().text().to_string();
+                                actions.push(CodeAction {
+                                    title: "Fix hunk line counts".to_string(),
+                                    kind: Some(CodeActionKind::QUICKFIX),
+                                    diagnostics: None,
+                                    edit: Some(WorkspaceEdit {
+                                        changes: Some(
+                                            [(
+                                                uri.clone(),
+                                                vec![TextEdit {
+                                                    range: lsp_header_range,
+                                                    new_text: fixed_header_text,
+                                                }],
+                                            )]
+                                            .into_iter()
+                                            .collect(),
+                                        ),
+                                        ..Default::default()
+                                    }),
+                                    command: None,
+                                    is_preferred: Some(true),
+                                    disabled: None,
+                                    data: None,
+                                });
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             // "Reverse hunk"
             if let Some(reversed) = reverse_hunk(source_text, &hunk) {
                 actions.push(CodeAction {
@@ -242,5 +289,47 @@ mod tests {
         // On second hunk line
         let actions = parse_and_actions(text, 6);
         assert_eq!(actions.len(), 2);
+    }
+
+    #[test]
+    fn test_fix_hunk_counts_action() {
+        let text = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,99 +1,99 @@
+-old
++new
+";
+        let actions = parse_and_actions(text, 3);
+        let titles: Vec<_> = actions.iter().map(|a| a.title.as_str()).collect();
+        assert!(titles.contains(&"Fix hunk line counts"), "got: {titles:?}");
+
+        let fix = actions
+            .iter()
+            .find(|a| a.title == "Fix hunk line counts")
+            .unwrap();
+        assert_eq!(fix.kind, Some(CodeActionKind::QUICKFIX));
+        assert_eq!(fix.is_preferred, Some(true));
+
+        // The edit should replace the header with corrected counts
+        let edit = fix.edit.as_ref().unwrap();
+        let changes = edit.changes.as_ref().unwrap();
+        let edits = changes.values().next().unwrap();
+        assert_eq!(edits[0].new_text, "@@ -1,1 +1,1 @@\n");
+    }
+
+    #[test]
+    fn test_no_fix_action_when_counts_correct() {
+        let text = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,2 +1,2 @@
+ ctx
+-old
++new
+";
+        let actions = parse_and_actions(text, 3);
+        let titles: Vec<_> = actions.iter().map(|a| a.title.as_str()).collect();
+        assert!(!titles.contains(&"Fix hunk line counts"));
     }
 }
