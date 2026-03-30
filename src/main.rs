@@ -28,6 +28,7 @@ mod series_code_lenses;
 mod series_completions;
 mod series_diagnostics;
 mod series_hover;
+mod series_inlay_hints;
 mod series_links;
 mod series_rename;
 mod series_reorder;
@@ -401,7 +402,20 @@ impl LanguageServer for Backend {
                     Some(hints)
                 }
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                let hints = series_inlay_hints::get_series_inlay_hints(
+                    &series,
+                    &file_info.text,
+                    range,
+                    uri,
+                );
+                if hints.is_empty() {
+                    None
+                } else {
+                    Some(hints)
+                }
+            }
         };
         drop(files);
 
