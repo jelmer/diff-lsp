@@ -715,6 +715,14 @@ impl LanguageServer for Backend {
                 })?;
                 run_quilt_command(&["new", patch_name], &working_dir)
             }
+            CMD_QUILT_IMPORT => {
+                // The first arg is the patch file URI — convert to a filesystem path
+                let patch_uri: Uri = series_uri
+                    .parse()
+                    .map_err(|_| tower_lsp_server::jsonrpc::Error::invalid_params("invalid URI"))?;
+                let patch_path = patch_uri.path().as_str();
+                run_quilt_command(&["import", patch_path], &working_dir)
+            }
             _ => {
                 return Err(tower_lsp_server::jsonrpc::Error::method_not_found());
             }
