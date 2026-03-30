@@ -29,6 +29,7 @@ mod series_completions;
 mod series_diagnostics;
 mod series_hover;
 mod series_links;
+mod series_rename;
 mod series_reorder;
 mod series_semantic;
 mod series_symbols;
@@ -120,6 +121,10 @@ impl LanguageServer for Backend {
                     ..Default::default()
                 }),
                 definition_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Right(RenameOptions {
+                    prepare_provider: Some(true),
+                    work_done_progress_options: Default::default(),
+                })),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_highlight_provider: Some(OneOf::Left(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
@@ -501,6 +506,52 @@ impl LanguageServer for Backend {
                 goto_definition::goto_definition(&patch, &file_info.text, position, uri)
             }
             ParsedFile::Series(_) => None,
+        };
+        drop(files);
+
+        Ok(result)
+    }
+
+    async fn prepare_rename(
+        &self,
+        params: TextDocumentPositionParams,
+    ) -> Result<Option<PrepareRenameResponse>> {
+        let uri = &params.text_document.uri;
+        let position = params.position;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                series_rename::prepare_rename(&series, &file_info.text, position)
+            }
+        };
+        drop(files);
+
+        Ok(result)
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = &params.new_name;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                series_rename::rename(&series, &file_info.text, position, new_name, uri)
+            }
         };
         drop(files);
 
