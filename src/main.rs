@@ -16,6 +16,7 @@ mod folding;
 mod highlights;
 mod hover;
 mod inlay_hints;
+mod patch_quilt_actions;
 mod patch_quilt_diagnostics;
 mod patch_quilt_lenses;
 mod position;
@@ -329,7 +330,9 @@ impl LanguageServer for Backend {
         let result = match &file_info.parsed {
             ParsedFile::Patch(parsed) => {
                 let patch = parsed.tree();
-                let actions = code_actions::get_code_actions(&patch, &file_info.text, range, uri);
+                let mut actions =
+                    code_actions::get_code_actions(&patch, &file_info.text, range, uri);
+                actions.extend(patch_quilt_actions::get_patch_quilt_actions(uri));
                 if actions.is_empty() {
                     None
                 } else {
@@ -583,6 +586,7 @@ impl LanguageServer for Backend {
                 })?;
                 run_quilt_command(&["delete", patch_name], &working_dir)
             }
+            CMD_QUILT_REFRESH => run_quilt_command(&["refresh"], &working_dir),
             _ => {
                 return Err(tower_lsp_server::jsonrpc::Error::method_not_found());
             }

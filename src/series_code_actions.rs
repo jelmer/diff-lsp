@@ -22,6 +22,7 @@ pub const CMD_QUILT_POP: &str = "diff-lsp.quiltPop";
 pub const CMD_QUILT_PUSH_ALL: &str = "diff-lsp.quiltPushAll";
 pub const CMD_QUILT_POP_ALL: &str = "diff-lsp.quiltPopAll";
 pub const CMD_QUILT_DELETE: &str = "diff-lsp.quiltDelete";
+pub const CMD_QUILT_REFRESH: &str = "diff-lsp.quiltRefresh";
 
 /// All command identifiers registered by this module.
 pub const COMMANDS: &[&str] = &[
@@ -30,6 +31,7 @@ pub const COMMANDS: &[&str] = &[
     CMD_QUILT_PUSH_ALL,
     CMD_QUILT_POP_ALL,
     CMD_QUILT_DELETE,
+    CMD_QUILT_REFRESH,
 ];
 
 /// Read the list of currently applied patches from `.pc/applied-patches`.
@@ -474,6 +476,7 @@ mod tests {
                 CMD_QUILT_PUSH_ALL,
                 CMD_QUILT_POP_ALL,
                 CMD_QUILT_DELETE,
+                CMD_QUILT_REFRESH,
             ]
         );
     }
