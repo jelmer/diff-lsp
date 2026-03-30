@@ -27,6 +27,7 @@ mod series_code_actions;
 mod series_code_lenses;
 mod series_completions;
 mod series_diagnostics;
+mod series_highlights;
 mod series_hover;
 mod series_inlay_hints;
 mod series_links;
@@ -444,7 +445,16 @@ impl LanguageServer for Backend {
                     Some(hl)
                 }
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                let hl =
+                    series_highlights::get_series_highlights(&series, &file_info.text, position);
+                if hl.is_empty() {
+                    None
+                } else {
+                    Some(hl)
+                }
+            }
         };
         drop(files);
 
