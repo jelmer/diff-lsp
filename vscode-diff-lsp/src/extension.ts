@@ -1,3 +1,5 @@
+import * as path from 'path';
+import * as fs from 'fs';
 import { workspace, ExtensionContext } from 'vscode';
 import {
   LanguageClient,
@@ -8,6 +10,15 @@ import {
 
 let client: LanguageClient;
 
+function getBundledServerPath(context: ExtensionContext): string | undefined {
+  const ext = process.platform === 'win32' ? '.exe' : '';
+  const bundled = path.join(context.extensionPath, 'server', 'diff-lsp' + ext);
+  if (fs.existsSync(bundled)) {
+    return bundled;
+  }
+  return undefined;
+}
+
 export function activate(context: ExtensionContext) {
   const config = workspace.getConfiguration('diff');
   const isEnable = config.get<boolean>('enable', true);
@@ -16,7 +27,7 @@ export function activate(context: ExtensionContext) {
     return;
   }
 
-  const serverPath = config.get<string>('serverPath', 'diff-lsp');
+  const serverPath = config.get<string>('serverPath') || getBundledServerPath(context) || 'diff-lsp';
 
   const serverOptions: ServerOptions = {
     command: serverPath,

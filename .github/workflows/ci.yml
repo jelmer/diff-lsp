@@ -37,3 +37,8 @@ jobs:
       - run: npm ci
       - run: npx tsc -p ./
       - run: npx eslint src --ext ts
+      - run: npx vsce package -o vscode-diff-lsp.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vscode-diff-lsp.vsix
+          path: vscode-diff-lsp/vscode-diff-lsp.vsix
