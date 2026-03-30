@@ -21,6 +21,7 @@ mod selection_ranges;
 mod semantic;
 mod series_code_lenses;
 mod series_diagnostics;
+mod series_hover;
 mod series_links;
 mod symbols;
 
@@ -387,7 +388,10 @@ impl LanguageServer for Backend {
                 let patch = parsed.tree();
                 hover::get_hover(&patch, &file_info.text, position)
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                series_hover::get_series_hover(&series, &file_info.text, position, uri)
+            }
         };
         drop(files);
 
