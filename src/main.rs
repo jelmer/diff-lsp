@@ -20,6 +20,7 @@ mod position;
 mod selection_ranges;
 mod semantic;
 mod series_code_lenses;
+mod series_completions;
 mod series_diagnostics;
 mod series_hover;
 mod series_links;
@@ -98,6 +99,10 @@ impl LanguageServer for Backend {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::INCREMENTAL,
                 )),
+                completion_provider: Some(CompletionOptions {
+                    trigger_characters: Some(vec!["/".to_string(), "-".to_string()]),
+                    ..Default::default()
+                }),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_highlight_provider: Some(OneOf::Left(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
@@ -180,6 +185,31 @@ impl LanguageServer for Backend {
         }
 
         self.update_file(uri, text).await;
+    }
+
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let uri = &params.text_document_position.text_document.uri;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                let items = series_completions::get_series_completions(&series, uri);
+                if items.is_empty() {
+                    None
+                } else {
+                    Some(CompletionResponse::Array(items))
+                }
+            }
+        };
+        drop(files);
+
+        Ok(result)
     }
 
     async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
