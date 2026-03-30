@@ -27,12 +27,14 @@ mod series_code_actions;
 mod series_code_lenses;
 mod series_completions;
 mod series_diagnostics;
+mod series_folding;
 mod series_highlights;
 mod series_hover;
 mod series_inlay_hints;
 mod series_links;
 mod series_rename;
 mod series_reorder;
+mod series_selection_ranges;
 mod series_semantic;
 mod series_symbols;
 mod symbols;
@@ -252,7 +254,16 @@ impl LanguageServer for Backend {
                 let patch = parsed.tree();
                 Some(folding::generate_folding_ranges(&patch, &file_info.text))
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                let ranges =
+                    series_folding::generate_series_folding_ranges(&series, &file_info.text);
+                if ranges.is_empty() {
+                    None
+                } else {
+                    Some(ranges)
+                }
+            }
         };
         drop(files);
 
@@ -644,7 +655,14 @@ impl LanguageServer for Backend {
                     &params.positions,
                 ))
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                Some(series_selection_ranges::get_series_selection_ranges(
+                    &series,
+                    &file_info.text,
+                    &params.positions,
+                ))
+            }
         };
         drop(files);
 
