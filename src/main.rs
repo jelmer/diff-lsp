@@ -16,6 +16,7 @@ mod folding;
 mod highlights;
 mod hover;
 mod inlay_hints;
+mod patch_quilt_lenses;
 mod position;
 mod selection_ranges;
 mod semantic;
@@ -290,7 +291,8 @@ impl LanguageServer for Backend {
         let result = match &file_info.parsed {
             ParsedFile::Patch(parsed) => {
                 let patch = parsed.tree();
-                let lenses = code_lenses::get_code_lenses(&patch, &file_info.text);
+                let mut lenses = code_lenses::get_code_lenses(&patch, &file_info.text);
+                lenses.extend(patch_quilt_lenses::get_patch_quilt_lenses(uri));
                 if lenses.is_empty() {
                     None
                 } else {
