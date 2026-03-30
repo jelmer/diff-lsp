@@ -529,7 +529,10 @@ impl LanguageServer for Backend {
                 let patch = parsed.tree();
                 goto_definition::goto_definition(&patch, &file_info.text, position, uri)
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                goto_definition::series_goto_definition(&series, &file_info.text, position, uri)
+            }
         };
         drop(files);
 

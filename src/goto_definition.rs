@@ -1,9 +1,12 @@
-//! Go-to-definition for file paths in patch headers.
+//! Go-to-definition for file paths in patch headers and series entries.
 //!
-//! When the cursor is on a file path in a `---` or `+++` line, jumps to the
-//! actual source file, resolving relative to the project root.
+//! - In patch files: when the cursor is on a file path in a `---` or `+++`
+//!   line, jumps to the actual source file.
+//! - In series files: when the cursor is on a patch name, jumps to the
+//!   patch file.
 
 use patchkit::edit::lex::SyntaxKind;
+use patchkit::edit::series::SeriesFile;
 use patchkit::edit::Patch;
 use rowan::ast::AstNode;
 use std::path::{Path, PathBuf};
@@ -50,6 +53,41 @@ pub fn goto_definition(
     // Find the project root and resolve the path
     let project_root = find_project_root(document_uri)?;
     let target_path = project_root.join(clean_path);
+
+    if !target_path.is_file() {
+        return None;
+    }
+
+    let target_uri: Uri = format!("file://{}", target_path.display()).parse().ok()?;
+
+    Some(GotoDefinitionResponse::Scalar(Location {
+        uri: target_uri,
+        range: Range::new(Position::new(0, 0), Position::new(0, 0)),
+    }))
+}
+
+/// Handle go-to-definition for a series file.
+///
+/// If the cursor is on a patch name, returns the location of the patch file.
+pub fn series_goto_definition(
+    series: &SeriesFile,
+    source_text: &str,
+    position: Position,
+    document_uri: &Uri,
+) -> Option<GotoDefinitionResponse> {
+    let offset = try_position_to_offset(source_text, position)?;
+
+    let entry = series.patch_entries().find(|entry| {
+        let range = entry.syntax().text_range();
+        range.start() <= offset && offset < range.end()
+    })?;
+
+    let name = entry.name()?;
+
+    let path_str = document_uri.path().as_str();
+    let series_path = Path::new(path_str);
+    let patches_dir = series_path.parent()?;
+    let target_path = patches_dir.join(&name);
 
     if !target_path.is_file() {
         return None;
@@ -298,5 +336,105 @@ mod tests {
         let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
 
         assert_eq!(find_project_root(&uri), Some(dir.path().join("debian")));
+    }
+
+    // --- series_goto_definition tests ---
+
+    fn parse_series_and_goto(
+        text: &str,
+        line: u32,
+        col: u32,
+        uri: &Uri,
+    ) -> Option<GotoDefinitionResponse> {
+        let parsed = patchkit::edit::series::parse(text);
+        let series = parsed.tree();
+        series_goto_definition(&series, text, Position::new(line, col), uri)
+    }
+
+    #[test]
+    fn test_series_goto_patch_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let patches_dir = dir.path().join("patches");
+        std::fs::create_dir_all(&patches_dir).unwrap();
+        std::fs::write(patches_dir.join("a.patch"), "content").unwrap();
+
+        let series_path = patches_dir.join("series");
+        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+
+        let result = parse_series_and_goto("a.patch\n", 0, 2, &uri);
+        assert!(result.is_some());
+        let GotoDefinitionResponse::Scalar(loc) = result.unwrap() else {
+            panic!("expected scalar response");
+        };
+        assert_eq!(
+            loc.uri.to_string(),
+            format!("file://{}", patches_dir.join("a.patch").display())
+        );
+    }
+
+    #[test]
+    fn test_series_goto_second_entry() {
+        let dir = tempfile::tempdir().unwrap();
+        let patches_dir = dir.path().join("patches");
+        std::fs::create_dir_all(&patches_dir).unwrap();
+        std::fs::write(patches_dir.join("a.patch"), "").unwrap();
+        std::fs::write(patches_dir.join("b.patch"), "").unwrap();
+
+        let series_path = patches_dir.join("series");
+        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+
+        let result = parse_series_and_goto("a.patch\nb.patch\n", 1, 2, &uri);
+        assert!(result.is_some());
+        let GotoDefinitionResponse::Scalar(loc) = result.unwrap() else {
+            panic!("expected scalar response");
+        };
+        assert_eq!(
+            loc.uri.to_string(),
+            format!("file://{}", patches_dir.join("b.patch").display())
+        );
+    }
+
+    #[test]
+    fn test_series_goto_missing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let patches_dir = dir.path().join("patches");
+        std::fs::create_dir_all(&patches_dir).unwrap();
+
+        let series_path = patches_dir.join("series");
+        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+
+        let result = parse_series_and_goto("missing.patch\n", 0, 2, &uri);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_series_goto_on_comment() {
+        let dir = tempfile::tempdir().unwrap();
+        let patches_dir = dir.path().join("patches");
+        std::fs::create_dir_all(&patches_dir).unwrap();
+
+        let series_path = patches_dir.join("series");
+        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+
+        let result = parse_series_and_goto("# comment\na.patch\n", 0, 2, &uri);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_series_goto_location_at_zero() {
+        let dir = tempfile::tempdir().unwrap();
+        let patches_dir = dir.path().join("patches");
+        std::fs::create_dir_all(&patches_dir).unwrap();
+        std::fs::write(patches_dir.join("a.patch"), "").unwrap();
+
+        let series_path = patches_dir.join("series");
+        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+
+        let result = parse_series_and_goto("a.patch\n", 0, 0, &uri).unwrap();
+        let GotoDefinitionResponse::Scalar(loc) = result else {
+            panic!("expected scalar response");
+        };
+        assert_eq!(loc.range.start, Position::new(0, 0));
+        assert_eq!(loc.range.end, Position::new(0, 0));
     }
 }
