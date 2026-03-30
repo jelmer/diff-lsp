@@ -25,6 +25,7 @@ mod series_completions;
 mod series_diagnostics;
 mod series_hover;
 mod series_links;
+mod series_reorder;
 mod symbols;
 
 use detection::FileKind;
@@ -325,12 +326,18 @@ impl LanguageServer for Backend {
             }
             ParsedFile::Series(parsed) => {
                 let series = parsed.tree();
-                let actions = series_code_actions::get_series_code_actions(
+                let mut actions = series_code_actions::get_series_code_actions(
                     &series,
                     &file_info.text,
                     range,
                     uri,
                 );
+                actions.extend(series_reorder::get_reorder_actions(
+                    &series,
+                    &file_info.text,
+                    range,
+                    uri,
+                ));
                 if actions.is_empty() {
                     None
                 } else {
