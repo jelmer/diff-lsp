@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   build-server:
@@ -126,6 +127,25 @@ jobs:
         with:
           name: vsix-universal
           path: vscode-diff-lsp-universal.vsix
+
+  publish-coc:
+    name: Publish coc-diff to npm
+    runs-on: ubuntu-latest
+    environment: npm
+    defaults:
+      run:
+        working-directory: coc-diff
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: coc-diff/package-lock.json
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish --provenance --access public
 
   release:
     name: Create release
