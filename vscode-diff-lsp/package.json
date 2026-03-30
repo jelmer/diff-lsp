@@ -1,5 +1,5 @@
 {
-  "name": "vscode-diff",
+  "name": "vscode-diff-lsp",
   "displayName": "Diff/Patch Language Support",
   "description": "Language Server Protocol support for diff/patch files and quilt series",
   "version": "0.1.0",
