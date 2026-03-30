@@ -27,7 +27,8 @@ export function activate(context: ExtensionContext) {
     return;
   }
 
-  const serverPath = config.get<string>('serverPath') || getBundledServerPath(context) || 'diff-lsp';
+  const configuredPath = config.get<string>('serverPath', '');
+  const serverPath = configuredPath.length > 0 ? configuredPath : (getBundledServerPath(context) || 'diff-lsp');
 
   const serverOptions: ServerOptions = {
     command: serverPath,

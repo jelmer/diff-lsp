@@ -65,8 +65,8 @@
         },
         "diff.serverPath": {
           "type": "string",
-          "default": "diff-lsp",
-          "description": "Path to diff-lsp executable. If not in PATH, provide full path."
+          "default": "",
+          "description": "Path to diff-lsp executable. Leave empty to use bundled binary or find diff-lsp in PATH."
         },
         "diff.trace.server": {
           "type": "string",
