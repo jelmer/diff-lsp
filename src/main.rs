@@ -26,6 +26,7 @@ mod series_diagnostics;
 mod series_hover;
 mod series_links;
 mod series_reorder;
+mod series_symbols;
 mod symbols;
 
 use detection::FileKind;
@@ -259,7 +260,15 @@ impl LanguageServer for Backend {
                     symbols::generate_document_symbols(&patch, &file_info.text),
                 ))
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                let syms = series_symbols::generate_series_symbols(&series, &file_info.text);
+                if syms.is_empty() {
+                    None
+                } else {
+                    Some(DocumentSymbolResponse::Nested(syms))
+                }
+            }
         };
         drop(files);
 
