@@ -16,6 +16,7 @@ mod folding;
 mod highlights;
 mod hover;
 mod inlay_hints;
+mod patch_quilt_diagnostics;
 mod patch_quilt_lenses;
 mod position;
 mod selection_ranges;
@@ -85,7 +86,8 @@ impl Backend {
             (ParsedFile::Series(parsed), diags)
         } else {
             let parsed = patchkit::edit::parse(&text);
-            let diags = diagnostics::get_diagnostics(&text, &parsed);
+            let mut diags = diagnostics::get_diagnostics(&text, &parsed);
+            diags.extend(patch_quilt_diagnostics::get_patch_quilt_diagnostics(&uri));
             (ParsedFile::Patch(parsed), diags)
         };
 
