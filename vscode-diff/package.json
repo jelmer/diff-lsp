@@ -1,0 +1,164 @@
+{
+  "name": "vscode-diff",
+  "displayName": "Diff/Patch Language Support",
+  "description": "Language Server Protocol support for diff/patch files and quilt series",
+  "version": "0.1.0",
+  "publisher": "jelmer",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jelmer/diff-lsp"
+  },
+  "bugs": {
+    "url": "https://github.com/jelmer/diff-lsp/issues"
+  },
+  "homepage": "https://github.com/jelmer/diff-lsp#readme",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "diff",
+    "patch",
+    "quilt",
+    "series",
+    "unified diff"
+  ],
+  "activationEvents": [
+    "onLanguage:diff",
+    "workspaceContains:**/series",
+    "workspaceContains:**/series.conf"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "diff",
+        "extensions": [
+          ".patch",
+          ".diff"
+        ]
+      },
+      {
+        "id": "quiltseries",
+        "aliases": [
+          "Quilt Series",
+          "quiltseries"
+        ],
+        "filenames": [
+          "series",
+          "series.conf"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Diff Language Server",
+      "properties": {
+        "diff.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable diff language server"
+        },
+        "diff.serverPath": {
+          "type": "string",
+          "default": "diff-lsp",
+          "description": "Path to diff-lsp executable. If not in PATH, provide full path."
+        },
+        "diff.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server."
+        }
+      }
+    },
+    "semanticTokenTypes": [
+      {
+        "id": "diffFileHeader",
+        "superType": "namespace",
+        "description": "Diff file header (--- / +++ lines)"
+      },
+      {
+        "id": "diffHunkHeader",
+        "superType": "keyword",
+        "description": "Diff hunk header (@@ ... @@ lines)"
+      },
+      {
+        "id": "diffAddedLine",
+        "superType": "string",
+        "description": "Added line (+ prefix)"
+      },
+      {
+        "id": "diffDeletedLine",
+        "superType": "operator",
+        "description": "Deleted line (- prefix)"
+      },
+      {
+        "id": "diffContextLine",
+        "superType": "comment",
+        "description": "Context line (space prefix)"
+      },
+      {
+        "id": "seriesPatchName",
+        "superType": "string",
+        "description": "Patch filename in a quilt series file"
+      },
+      {
+        "id": "seriesOption",
+        "superType": "keyword",
+        "description": "Option in a quilt series file"
+      },
+      {
+        "id": "seriesComment",
+        "superType": "comment",
+        "description": "Comment in a quilt series file"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "diff",
+        "scopes": {
+          "diffFileHeader": ["meta.diff.header"],
+          "diffHunkHeader": ["meta.diff.range"],
+          "diffAddedLine": ["markup.inserted.diff"],
+          "diffDeletedLine": ["markup.deleted.diff"],
+          "diffContextLine": ["markup.unchanged.diff"]
+        }
+      },
+      {
+        "language": "quiltseries",
+        "scopes": {
+          "seriesPatchName": ["string"],
+          "seriesOption": ["keyword"],
+          "seriesComment": ["comment"]
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^6.x",
+    "@typescript-eslint/parser": "^6.x",
+    "@vscode/vsce": "^2.x",
+    "eslint": "^8.x",
+    "typescript": "^5.x"
+  }
+}
