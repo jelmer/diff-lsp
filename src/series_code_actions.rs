@@ -23,6 +23,7 @@ pub const CMD_QUILT_PUSH_ALL: &str = "diff-lsp.quiltPushAll";
 pub const CMD_QUILT_POP_ALL: &str = "diff-lsp.quiltPopAll";
 pub const CMD_QUILT_DELETE: &str = "diff-lsp.quiltDelete";
 pub const CMD_QUILT_REFRESH: &str = "diff-lsp.quiltRefresh";
+pub const CMD_QUILT_NEW: &str = "diff-lsp.quiltNew";
 
 /// All command identifiers registered by this module.
 pub const COMMANDS: &[&str] = &[
@@ -32,6 +33,7 @@ pub const COMMANDS: &[&str] = &[
     CMD_QUILT_POP_ALL,
     CMD_QUILT_DELETE,
     CMD_QUILT_REFRESH,
+    CMD_QUILT_NEW,
 ];
 
 /// Read the list of currently applied patches from `.pc/applied-patches`.
@@ -189,6 +191,20 @@ pub fn get_series_code_actions(
         }
     }
 
+    // Always offer "New patch" when on any patch entry
+    if !actions.is_empty() {
+        actions.push(CodeAction {
+            title: "New patch (quilt new)".to_string(),
+            kind: Some(CodeActionKind::new("source")),
+            command: Some(Command {
+                title: "New patch".to_string(),
+                command: CMD_QUILT_NEW.to_string(),
+                arguments: Some(vec![serde_json::Value::String(uri.to_string())]),
+            }),
+            ..Default::default()
+        });
+    }
+
     actions
 }
 
@@ -296,6 +312,7 @@ mod tests {
                 "Remove 'a.patch' from series",
                 "Delete patch (quilt delete a.patch)",
                 "Apply all patches (quilt push -a)",
+                "New patch (quilt new)",
             ]
         );
     }
@@ -323,6 +340,7 @@ mod tests {
                 "Remove 'a.patch' from series",
                 "Apply all patches (quilt push -a)",
                 "Unapply all patches (quilt pop -a)",
+                "New patch (quilt new)",
             ]
         );
     }
@@ -368,6 +386,7 @@ mod tests {
                 "Remove 'a.patch' from series",
                 "Delete patch (quilt delete a.patch)",
                 "Apply all patches (quilt push -a)",
+                "New patch (quilt new)",
             ]
         );
     }
@@ -394,6 +413,7 @@ mod tests {
                 "Unapply patch (quilt pop a.patch)",
                 "Remove 'a.patch' from series",
                 "Unapply all patches (quilt pop -a)",
+                "New patch (quilt new)",
             ]
         );
     }
@@ -477,6 +497,7 @@ mod tests {
                 CMD_QUILT_POP_ALL,
                 CMD_QUILT_DELETE,
                 CMD_QUILT_REFRESH,
+                CMD_QUILT_NEW,
             ]
         );
     }
@@ -535,7 +556,35 @@ mod tests {
                 "Unapply patch (quilt pop a.patch)",
                 "Remove 'a.patch' from series",
                 "Unapply all patches (quilt pop -a)",
+                "New patch (quilt new)",
             ]
         );
+    }
+
+    // --- new patch test ---
+
+    #[test]
+    fn test_new_patch_action_command() {
+        let (_dir, patches_dir, pc_dir) = setup_quilt_project();
+        std::fs::write(pc_dir.join("applied-patches"), "").unwrap();
+
+        let text = "a.patch\n";
+        let parsed = parse_series(text);
+        let series = parsed.tree();
+        let series_path = patches_dir.join("series");
+        let uri = make_uri(&series_path);
+
+        let range = Range::new(Position::new(0, 0), Position::new(0, 0));
+        let actions = get_series_code_actions(&series, text, range, &uri);
+
+        let new_action = actions
+            .iter()
+            .find(|a| a.title == "New patch (quilt new)")
+            .unwrap();
+        let cmd = new_action.command.as_ref().unwrap();
+        assert_eq!(cmd.command, CMD_QUILT_NEW);
+        let args = cmd.arguments.as_ref().unwrap();
+        assert_eq!(args.len(), 1);
+        assert_eq!(args[0], serde_json::Value::String(uri.to_string()));
     }
 }

@@ -613,6 +613,12 @@ impl LanguageServer for Backend {
                 run_quilt_command(&["delete", patch_name], &working_dir)
             }
             CMD_QUILT_REFRESH => run_quilt_command(&["refresh"], &working_dir),
+            CMD_QUILT_NEW => {
+                let patch_name = args.get(1).and_then(|v| v.as_str()).ok_or_else(|| {
+                    tower_lsp_server::jsonrpc::Error::invalid_params("missing patch name")
+                })?;
+                run_quilt_command(&["new", patch_name], &working_dir)
+            }
             _ => {
                 return Err(tower_lsp_server::jsonrpc::Error::method_not_found());
             }
