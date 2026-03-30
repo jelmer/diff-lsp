@@ -19,6 +19,7 @@ mod inlay_hints;
 mod position;
 mod selection_ranges;
 mod semantic;
+mod series_code_actions;
 mod series_code_lenses;
 mod series_completions;
 mod series_diagnostics;
@@ -99,6 +100,13 @@ impl LanguageServer for Backend {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
                     TextDocumentSyncKind::INCREMENTAL,
                 )),
+                execute_command_provider: Some(ExecuteCommandOptions {
+                    commands: series_code_actions::COMMANDS
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect(),
+                    ..Default::default()
+                }),
                 completion_provider: Some(CompletionOptions {
                     trigger_characters: Some(vec!["/".to_string(), "-".to_string()]),
                     ..Default::default()
@@ -315,7 +323,25 @@ impl LanguageServer for Backend {
                     )
                 }
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                let actions = series_code_actions::get_series_code_actions(
+                    &series,
+                    &file_info.text,
+                    range,
+                    uri,
+                );
+                if actions.is_empty() {
+                    None
+                } else {
+                    Some(
+                        actions
+                            .into_iter()
+                            .map(CodeActionOrCommand::CodeAction)
+                            .collect(),
+                    )
+                }
+            }
         };
         drop(files);
 
@@ -480,6 +506,56 @@ impl LanguageServer for Backend {
         drop(files);
 
         Ok(result)
+    }
+
+    async fn execute_command(
+        &self,
+        params: ExecuteCommandParams,
+    ) -> Result<Option<tower_lsp_server::ls_types::LSPAny>> {
+        use series_code_actions::*;
+
+        let command = params.command.as_str();
+        let args = &params.arguments;
+
+        let series_uri = args
+            .first()
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| tower_lsp_server::jsonrpc::Error::invalid_params("missing URI"))?;
+
+        let working_dir = find_quilt_working_dir(series_uri).ok_or_else(|| {
+            tower_lsp_server::jsonrpc::Error::invalid_params("cannot determine working directory")
+        })?;
+
+        let result = match command {
+            CMD_QUILT_PUSH => {
+                let patch_name = args.get(1).and_then(|v| v.as_str()).ok_or_else(|| {
+                    tower_lsp_server::jsonrpc::Error::invalid_params("missing patch name")
+                })?;
+                run_quilt_command(&["push", patch_name], &working_dir)
+            }
+            CMD_QUILT_POP => {
+                let patch_name = args.get(1).and_then(|v| v.as_str()).ok_or_else(|| {
+                    tower_lsp_server::jsonrpc::Error::invalid_params("missing patch name")
+                })?;
+                run_quilt_command(&["pop", patch_name], &working_dir)
+            }
+            CMD_QUILT_PUSH_ALL => run_quilt_command(&["push", "-a"], &working_dir),
+            CMD_QUILT_POP_ALL => run_quilt_command(&["pop", "-a"], &working_dir),
+            _ => {
+                return Err(tower_lsp_server::jsonrpc::Error::method_not_found());
+            }
+        };
+
+        match result {
+            Ok(output) => {
+                self.client.log_message(MessageType::INFO, &output).await;
+                Ok(Some(serde_json::Value::String(output)))
+            }
+            Err(err) => {
+                self.client.log_message(MessageType::ERROR, &err).await;
+                Err(tower_lsp_server::jsonrpc::Error::internal_error())
+            }
+        }
     }
 }
 
