@@ -17,12 +17,12 @@ pub fn get_document_links(
 
     for file in patch.patch_files() {
         if let Some(old_file) = file.old_file() {
-            if let Some(link) = path_link(source_text, &old_file.syntax(), document_uri) {
+            if let Some(link) = path_link(source_text, old_file.syntax(), document_uri) {
                 links.push(link);
             }
         }
         if let Some(new_file) = file.new_file() {
-            if let Some(link) = path_link(source_text, &new_file.syntax(), document_uri) {
+            if let Some(link) = path_link(source_text, new_file.syntax(), document_uri) {
                 links.push(link);
             }
         }

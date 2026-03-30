@@ -91,28 +91,6 @@ fn is_under_quilt_patches(path: &Path) -> bool {
     false
 }
 
-/// Find the patches directory for a given file URI, if it's part of a
-/// quilt-managed project.
-///
-/// Walks up from the file looking for a `patches/` directory with a
-/// sibling `.pc/` or `debian/` directory.
-pub fn find_patches_dir(uri: &Uri) -> Option<PathBuf> {
-    let path = uri_to_path(uri)?;
-    for ancestor in path.ancestors().skip(1) {
-        if ancestor.file_name().and_then(|n| n.to_str()) == Some("patches") {
-            let parent = ancestor.parent()?;
-            if parent.join(".pc").is_dir() || parent.join("debian").is_dir() {
-                return Some(ancestor.to_path_buf());
-            }
-        }
-        // Also check if *this* directory contains patches/ and .pc/
-        if ancestor.join(".pc").is_dir() && ancestor.join("patches").is_dir() {
-            return Some(ancestor.join("patches"));
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

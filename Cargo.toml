@@ -11,7 +11,7 @@ keywords = ["lsp", "diff", "patch", "language-server"]
 categories = ["development-tools", "text-editors"]
 
 [dependencies]
-patchkit = { version = "0.2.2", path = "../patchkit" }
+patchkit = "0.2.3"
 rowan = "0.16.1"
 serde_json = "1"
 text-size = "1.1"
