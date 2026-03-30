@@ -3,6 +3,7 @@
 //! Provides:
 //! - "Remove hunk" - delete a hunk from the patch
 //! - "Reverse hunk" - swap added and deleted lines
+//! - "Split hunk" - split a hunk into two at a context line
 
 use patchkit::edit::Patch;
 use rowan::ast::AstNode;
@@ -132,10 +133,146 @@ pub fn get_code_actions(
                     data: None,
                 });
             }
+
+            // "Split hunk" - only on context lines
+            if let Some(split_text) = split_hunk(source_text, &hunk, text_range.start()) {
+                actions.push(CodeAction {
+                    title: "Split hunk at cursor".to_string(),
+                    kind: Some(CodeActionKind::REFACTOR),
+                    diagnostics: None,
+                    edit: Some(WorkspaceEdit {
+                        changes: Some(
+                            [(
+                                uri.clone(),
+                                vec![TextEdit {
+                                    range: lsp_hunk_range,
+                                    new_text: split_text,
+                                }],
+                            )]
+                            .into_iter()
+                            .collect(),
+                        ),
+                        ..Default::default()
+                    }),
+                    command: None,
+                    is_preferred: None,
+                    disabled: None,
+                    data: None,
+                });
+            }
         }
     }
 
     actions
+}
+
+/// Split a hunk into two at the cursor position.
+///
+/// The cursor must be on a context line. The context line at the split point
+/// becomes the last line of the first hunk and the first line of the second hunk.
+/// Returns the replacement text (two hunks) or None if split is not possible.
+fn split_hunk(
+    source_text: &str,
+    hunk: &patchkit::edit::Hunk,
+    cursor_offset: text_size::TextSize,
+) -> Option<String> {
+    let header = hunk.header()?;
+    let old_start = header.old_range()?.start()?;
+    let new_start = header.new_range()?.start()?;
+
+    let hunk_range = hunk.syntax().text_range();
+    let hunk_src = &source_text[usize::from(hunk_range.start())..usize::from(hunk_range.end())];
+    let lines: Vec<&str> = hunk_src.lines().collect();
+
+    // Find which line the cursor is on (relative to the hunk start)
+    let cursor_byte = usize::from(cursor_offset) - usize::from(hunk_range.start());
+    let mut byte_pos = 0;
+    let mut cursor_line = 0;
+    for (i, line) in lines.iter().enumerate() {
+        let line_end = byte_pos + line.len() + 1; // +1 for newline
+        if cursor_byte < line_end {
+            cursor_line = i;
+            break;
+        }
+        byte_pos = line_end;
+    }
+
+    // Line 0 is the header — skip it. The cursor must be on a context line.
+    if cursor_line == 0 {
+        return None;
+    }
+
+    // Check that the cursor line is a context line (starts with space)
+    let cursor_line_text = lines.get(cursor_line)?;
+    if !cursor_line_text.starts_with(' ') {
+        return None;
+    }
+
+    // Split into first half (header + lines up to and including cursor line)
+    // and second half (cursor line + remaining lines with new header)
+    let first_lines = &lines[1..=cursor_line]; // body lines for first hunk
+    let second_lines = &lines[cursor_line..]; // body lines for second hunk (including split line)
+
+    // Count old/new lines in each half
+    let (first_old, first_new) = count_old_new(first_lines);
+    let (second_old, second_new) = count_old_new(second_lines);
+
+    // Need at least one change in each half
+    let first_has_change = first_lines
+        .iter()
+        .any(|l| l.starts_with('+') || l.starts_with('-'));
+    let second_has_change = second_lines
+        .iter()
+        .any(|l| l.starts_with('+') || l.starts_with('-'));
+    if !first_has_change || !second_has_change {
+        return None;
+    }
+
+    // Build first hunk
+    let mut result = format!(
+        "@@ -{},{} +{},{} @@\n",
+        old_start, first_old, new_start, first_new
+    );
+    for line in first_lines {
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    // Build second hunk
+    let second_old_start = old_start + first_old - 1; // -1 because the context line is shared
+    let second_new_start = new_start + first_new - 1;
+    result.push_str(&format!(
+        "@@ -{},{} +{},{} @@\n",
+        second_old_start, second_old, second_new_start, second_new
+    ));
+    for line in second_lines {
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    // Match trailing newline behavior of original
+    if !hunk_src.ends_with('\n') {
+        result.pop();
+    }
+
+    Some(result)
+}
+
+/// Count old-side and new-side lines in a slice of hunk body lines.
+fn count_old_new(lines: &[&str]) -> (u32, u32) {
+    let mut old = 0u32;
+    let mut new = 0u32;
+    for line in lines {
+        if line.starts_with(' ') {
+            old += 1;
+            new += 1;
+        } else if line.starts_with('-') {
+            old += 1;
+        } else if line.starts_with('+') {
+            new += 1;
+        }
+    }
+    (old, new)
 }
 
 /// Reverse a hunk by swapping + and - lines and swapping the ranges in the header.
@@ -331,5 +468,155 @@ mod tests {
         let actions = parse_and_actions(text, 3);
         let titles: Vec<_> = actions.iter().map(|a| a.title.as_str()).collect();
         assert!(!titles.contains(&"Fix hunk line counts"));
+    }
+
+    // --- Split hunk tests ---
+
+    fn parse_and_split(text: &str, cursor_line: u32) -> Option<String> {
+        let parsed = patchkit::edit::parse(text);
+        let patch = parsed.tree();
+        let offset = crate::position::try_position_to_offset(text, Position::new(cursor_line, 0))?;
+        for file in patch.patch_files() {
+            for hunk in file.hunks() {
+                if let Some(result) = split_hunk(text, &hunk, offset) {
+                    return Some(result);
+                }
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn test_split_hunk_on_context_line() {
+        let text = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,7 +1,7 @@
+ ctx1
+-old1
++new1
+ ctx2
+-old2
++new2
+ ctx3
+";
+        // Split at ctx2 (line 6)
+        let result = parse_and_split(text, 6).unwrap();
+        assert_eq!(
+            result,
+            "\
+@@ -1,3 +1,3 @@
+ ctx1
+-old1
++new1
+ ctx2
+@@ -3,3 +3,3 @@
+ ctx2
+-old2
++new2
+ ctx3
+"
+        );
+    }
+
+    #[test]
+    fn test_split_hunk_not_on_context_line() {
+        let text = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,4 +1,4 @@
+ ctx
+-old1
++new1
+ ctx2
+";
+        // Cursor on -old1 (line 4) — not a context line
+        let result = parse_and_split(text, 4);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_split_hunk_on_header() {
+        let text = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,4 +1,4 @@
+ ctx
+-old
++new
+ ctx2
+";
+        // Cursor on hunk header (line 2)
+        let result = parse_and_split(text, 2);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_split_hunk_no_change_in_first_half() {
+        let text = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,4 +1,4 @@
+ ctx1
+ ctx2
+-old
++new
+";
+        // Split at ctx2 (line 4) — first half would have no changes
+        let result = parse_and_split(text, 4);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_split_hunk_no_change_in_second_half() {
+        let text = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,4 +1,4 @@
+-old
++new
+ ctx1
+ ctx2
+";
+        // Split at ctx1 — second half would have no changes
+        let result = parse_and_split(text, 5);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_split_hunk_action_offered_on_context() {
+        let text = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,3 +1,3 @@
+-old1
++new1
+ ctx
+-old2
++new2
+";
+        let actions = parse_and_actions(text, 5); // on ctx line
+        let titles: Vec<_> = actions.iter().map(|a| a.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            vec!["Remove hunk", "Reverse hunk", "Split hunk at cursor"]
+        );
+    }
+
+    #[test]
+    fn test_split_hunk_action_not_offered_on_change_line() {
+        let text = "\
+--- a/file.txt
++++ b/file.txt
+@@ -1,3 +1,3 @@
+ ctx1
+-old
++new
+ ctx2
+";
+        let actions = parse_and_actions(text, 4); // on -old line
+        let titles: Vec<_> = actions.iter().map(|a| a.title.as_str()).collect();
+        // Split should not be offered
+        assert_eq!(titles, vec!["Remove hunk", "Reverse hunk"]);
     }
 }
