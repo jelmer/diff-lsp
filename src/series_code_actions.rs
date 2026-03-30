@@ -5,6 +5,8 @@
 //! - "Unapply patch" (quilt pop <patch>) - unapply down to a specific patch
 //! - "Apply all patches" (quilt push -a)
 //! - "Unapply all patches" (quilt pop -a)
+//! - "Remove patch from series" - delete the entry line
+//! - "Delete patch" (quilt delete <patch>) - remove from series and delete file
 
 use patchkit::edit::series::SeriesFile;
 use rowan::ast::AstNode;
@@ -12,13 +14,14 @@ use std::collections::HashSet;
 use std::path::Path;
 use tower_lsp_server::ls_types::*;
 
-use crate::position::try_lsp_range_to_text_range;
+use crate::position::{text_range_to_lsp_range, try_lsp_range_to_text_range};
 
 /// Command identifiers for quilt operations.
 pub const CMD_QUILT_PUSH: &str = "diff-lsp.quiltPush";
 pub const CMD_QUILT_POP: &str = "diff-lsp.quiltPop";
 pub const CMD_QUILT_PUSH_ALL: &str = "diff-lsp.quiltPushAll";
 pub const CMD_QUILT_POP_ALL: &str = "diff-lsp.quiltPopAll";
+pub const CMD_QUILT_DELETE: &str = "diff-lsp.quiltDelete";
 
 /// All command identifiers registered by this module.
 pub const COMMANDS: &[&str] = &[
@@ -26,6 +29,7 @@ pub const COMMANDS: &[&str] = &[
     CMD_QUILT_POP,
     CMD_QUILT_PUSH_ALL,
     CMD_QUILT_POP_ALL,
+    CMD_QUILT_DELETE,
 ];
 
 /// Read the list of currently applied patches from `.pc/applied-patches`.
@@ -100,6 +104,45 @@ pub fn get_series_code_actions(
                 command: Some(Command {
                     title: format!("Unapply patch {}", name),
                     command: CMD_QUILT_POP.to_string(),
+                    arguments: Some(vec![
+                        serde_json::Value::String(uri.to_string()),
+                        serde_json::Value::String(name.clone()),
+                    ]),
+                }),
+                ..Default::default()
+            });
+        }
+
+        // "Remove from series" - just delete the entry line
+        let entry_lsp_range = text_range_to_lsp_range(source_text, entry_range);
+        actions.push(CodeAction {
+            title: format!("Remove '{}' from series", name),
+            kind: Some(CodeActionKind::REFACTOR),
+            edit: Some(WorkspaceEdit {
+                changes: Some(
+                    [(
+                        uri.clone(),
+                        vec![TextEdit {
+                            range: entry_lsp_range,
+                            new_text: String::new(),
+                        }],
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+
+        // "Delete patch" - run quilt delete to remove from series and delete file
+        if !is_applied {
+            actions.push(CodeAction {
+                title: format!("Delete patch (quilt delete {})", name),
+                kind: Some(CodeActionKind::new("source")),
+                command: Some(Command {
+                    title: format!("Delete patch {}", name),
+                    command: CMD_QUILT_DELETE.to_string(),
                     arguments: Some(vec![
                         serde_json::Value::String(uri.to_string()),
                         serde_json::Value::String(name.clone()),
@@ -248,6 +291,8 @@ mod tests {
             titles,
             vec![
                 "Apply patch (quilt push a.patch)",
+                "Remove 'a.patch' from series",
+                "Delete patch (quilt delete a.patch)",
                 "Apply all patches (quilt push -a)",
             ]
         );
@@ -273,6 +318,7 @@ mod tests {
             titles,
             vec![
                 "Unapply patch (quilt pop a.patch)",
+                "Remove 'a.patch' from series",
                 "Apply all patches (quilt push -a)",
                 "Unapply all patches (quilt pop -a)",
             ]
@@ -311,12 +357,14 @@ mod tests {
         let range = Range::new(Position::new(0, 0), Position::new(0, 0));
         let actions = get_series_code_actions(&series, text, range, &uri);
 
-        // No .pc dir means no applied patches, so only push actions
+        // No .pc dir means no applied patches, so push + remove + delete actions
         let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
         assert_eq!(
             titles,
             vec![
                 "Apply patch (quilt push a.patch)",
+                "Remove 'a.patch' from series",
+                "Delete patch (quilt delete a.patch)",
                 "Apply all patches (quilt push -a)",
             ]
         );
@@ -337,11 +385,12 @@ mod tests {
         let actions = get_series_code_actions(&series, text, range, &uri);
 
         let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
-        // All applied: only pop actions, no push-all
+        // All applied: pop + remove actions, no push-all, no delete (applied)
         assert_eq!(
             titles,
             vec![
                 "Unapply patch (quilt pop a.patch)",
+                "Remove 'a.patch' from series",
                 "Unapply all patches (quilt pop -a)",
             ]
         );
@@ -423,17 +472,48 @@ mod tests {
                 CMD_QUILT_PUSH,
                 CMD_QUILT_POP,
                 CMD_QUILT_PUSH_ALL,
-                CMD_QUILT_POP_ALL
+                CMD_QUILT_POP_ALL,
+                CMD_QUILT_DELETE,
             ]
         );
     }
 
-    // --- action kind test ---
+    // --- remove from series test ---
 
     #[test]
-    fn test_action_kind_is_source() {
+    fn test_remove_from_series_edit() {
         let (_dir, patches_dir, pc_dir) = setup_quilt_project();
         std::fs::write(pc_dir.join("applied-patches"), "").unwrap();
+
+        let text = "a.patch\nb.patch\n";
+        let parsed = parse_series(text);
+        let series = parsed.tree();
+        let series_path = patches_dir.join("series");
+        let uri = make_uri(&series_path);
+
+        let range = Range::new(Position::new(0, 0), Position::new(0, 0));
+        let actions = get_series_code_actions(&series, text, range, &uri);
+
+        let remove = actions
+            .iter()
+            .find(|a| a.title == "Remove 'a.patch' from series")
+            .unwrap();
+        assert_eq!(remove.kind, Some(CodeActionKind::REFACTOR));
+        // Should have an edit, not a command
+        assert_eq!(remove.edit.is_some(), true);
+        assert_eq!(remove.command, None);
+        let edit = remove.edit.as_ref().unwrap();
+        let changes = edit.changes.as_ref().unwrap();
+        let edits = changes.values().next().unwrap();
+        assert_eq!(edits[0].new_text, "");
+    }
+
+    // --- delete patch test ---
+
+    #[test]
+    fn test_delete_patch_only_for_unapplied() {
+        let (_dir, patches_dir, pc_dir) = setup_quilt_project();
+        std::fs::write(pc_dir.join("applied-patches"), "a.patch\n").unwrap();
 
         let text = "a.patch\n";
         let parsed = parse_series(text);
@@ -444,8 +524,15 @@ mod tests {
         let range = Range::new(Position::new(0, 0), Position::new(0, 0));
         let actions = get_series_code_actions(&series, text, range, &uri);
 
-        for action in &actions {
-            assert_eq!(action.kind, Some(CodeActionKind::new("source")));
-        }
+        // Applied patch: pop + remove + pop-all, no delete
+        let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            vec![
+                "Unapply patch (quilt pop a.patch)",
+                "Remove 'a.patch' from series",
+                "Unapply all patches (quilt pop -a)",
+            ]
+        );
     }
 }
