@@ -13,6 +13,7 @@ mod detection;
 mod diagnostics;
 mod document_links;
 mod folding;
+mod goto_definition;
 mod highlights;
 mod hover;
 mod inlay_hints;
@@ -118,6 +119,7 @@ impl LanguageServer for Backend {
                     trigger_characters: Some(vec!["/".to_string(), "-".to_string()]),
                     ..Default::default()
                 }),
+                definition_provider: Some(OneOf::Left(true)),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 document_highlight_provider: Some(OneOf::Left(true)),
                 code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
@@ -475,6 +477,30 @@ impl LanguageServer for Backend {
                 let series = parsed.tree();
                 series_hover::get_series_hover(&series, &file_info.text, position, uri)
             }
+        };
+        drop(files);
+
+        Ok(result)
+    }
+
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = &params.text_document_position_params.text_document.uri;
+        let position = params.text_document_position_params.position;
+
+        let files = self.files.lock().await;
+        let Some(file_info) = files.get(uri) else {
+            return Ok(None);
+        };
+
+        let result = match &file_info.parsed {
+            ParsedFile::Patch(parsed) => {
+                let patch = parsed.tree();
+                goto_definition::goto_definition(&patch, &file_info.text, position, uri)
+            }
+            ParsedFile::Series(_) => None,
         };
         drop(files);
 
