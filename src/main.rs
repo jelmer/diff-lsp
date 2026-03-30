@@ -26,6 +26,7 @@ mod series_diagnostics;
 mod series_hover;
 mod series_links;
 mod series_reorder;
+mod series_semantic;
 mod series_symbols;
 mod symbols;
 
@@ -138,6 +139,9 @@ impl LanguageServer for Backend {
                                     SemanticTokenType::new("diffAddedLine"),
                                     SemanticTokenType::new("diffDeletedLine"),
                                     SemanticTokenType::new("diffContextLine"),
+                                    SemanticTokenType::new("seriesPatchName"),
+                                    SemanticTokenType::new("seriesOption"),
+                                    SemanticTokenType::new("seriesComment"),
                                 ],
                                 token_modifiers: vec![],
                             },
@@ -490,7 +494,19 @@ impl LanguageServer for Backend {
                     data: tokens,
                 }))
             }
-            ParsedFile::Series(_) => None,
+            ParsedFile::Series(parsed) => {
+                let series = parsed.tree();
+                let tokens =
+                    series_semantic::generate_series_semantic_tokens(&series, &file_info.text);
+                if tokens.is_empty() {
+                    None
+                } else {
+                    Some(SemanticTokensResult::Tokens(SemanticTokens {
+                        result_id: None,
+                        data: tokens,
+                    }))
+                }
+            }
         };
         drop(files);
 
