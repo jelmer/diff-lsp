@@ -5,7 +5,6 @@
 
 use patchkit::edit::series::{PatchEntry, SeriesFile};
 use rowan::ast::AstNode;
-use std::path::Path;
 use tower_lsp_server::ls_types::*;
 
 use crate::position::{text_range_to_lsp_range, try_position_to_offset};
@@ -53,8 +52,7 @@ fn find_patch_entry_at_offset(
 
 /// Extract the patches directory from a series file URI.
 fn patches_dir_from_uri(uri: &Uri) -> Option<std::path::PathBuf> {
-    let path_str = uri.path().as_str();
-    let path = Path::new(path_str);
+    let path = uri.to_file_path()?;
     path.parent().map(|p| p.to_path_buf())
 }
 
@@ -350,7 +348,7 @@ Subject: Fix things
         let parsed = parse_series(series_text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let hover = get_series_hover(&series, series_text, Position::new(0, 2), &uri).unwrap();
         assert_eq!(
@@ -373,7 +371,7 @@ Subject: Fix things
         let parsed = parse_series(series_text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         assert_eq!(
             get_series_hover(&series, series_text, Position::new(0, 2), &uri),
@@ -391,7 +389,7 @@ Subject: Fix things
         let parsed = parse_series(series_text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         assert_eq!(
             get_series_hover(&series, series_text, Position::new(0, 5), &uri),
@@ -419,7 +417,7 @@ Subject: Fix things
         let parsed = parse_series(series_text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let hover = get_series_hover(&series, series_text, Position::new(1, 2), &uri).unwrap();
         assert_eq!(

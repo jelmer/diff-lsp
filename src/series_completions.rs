@@ -41,8 +41,7 @@ pub fn get_series_completions(series: &SeriesFile, uri: &Uri) -> Vec<CompletionI
 
 /// Extract the patches directory from a series file URI.
 fn patches_dir_from_uri(uri: &Uri) -> Option<std::path::PathBuf> {
-    let path_str = uri.path().as_str();
-    let path = Path::new(path_str);
+    let path = uri.to_file_path()?;
     path.parent().map(|p| p.to_path_buf())
 }
 
@@ -89,7 +88,7 @@ mod tests {
         let text = "a.patch\n";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let completions = get_series_completions(&series, &uri);
         let labels: Vec<&str> = completions.iter().map(|c| c.label.as_str()).collect();
@@ -105,7 +104,7 @@ mod tests {
         let text = "a.patch\n";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let completions = get_series_completions(&series, &uri);
         assert_eq!(completions.len(), 0);
@@ -121,7 +120,7 @@ mod tests {
         let text = "";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let completions = get_series_completions(&series, &uri);
         let labels: Vec<&str> = completions.iter().map(|c| c.label.as_str()).collect();
@@ -136,7 +135,7 @@ mod tests {
         let text = "";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let completions = get_series_completions(&series, &uri);
         assert_eq!(completions.len(), 0);
@@ -154,7 +153,7 @@ mod tests {
         let text = "";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let completions = get_series_completions(&series, &uri);
         let labels: Vec<&str> = completions.iter().map(|c| c.label.as_str()).collect();
@@ -172,7 +171,7 @@ mod tests {
         let text = "";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let completions = get_series_completions(&series, &uri);
         let labels: Vec<&str> = completions.iter().map(|c| c.label.as_str()).collect();
@@ -199,7 +198,7 @@ mod tests {
         let text = "";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let completions = get_series_completions(&series, &uri);
         assert_eq!(completions.len(), 1);
@@ -218,7 +217,7 @@ mod tests {
         let text = "";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let completions = get_series_completions(&series, &uri);
         let labels: Vec<&str> = completions.iter().map(|c| c.label.as_str()).collect();

@@ -4,7 +4,6 @@
 //! - "Refresh patch" (quilt refresh) when the patch is the top applied patch
 //! - "Import patch" (quilt import) when the patch is not listed in the series
 
-use std::path::Path;
 use tower_lsp_server::ls_types::*;
 
 use crate::series_code_actions::{CMD_QUILT_IMPORT, CMD_QUILT_REFRESH};
@@ -56,8 +55,7 @@ pub fn get_patch_quilt_actions(uri: &Uri) -> Vec<CodeAction> {
 
 /// Extract the file name from a URI.
 fn extract_patch_name(uri: &Uri) -> Option<String> {
-    let path_str = uri.path().as_str();
-    let path = Path::new(path_str);
+    let path = uri.to_file_path()?;
     path.file_name()?.to_str().map(|s| s.to_string())
 }
 
@@ -66,8 +64,9 @@ fn extract_patch_name(uri: &Uri) -> Option<String> {
 /// Returns true if there is a sibling `series` file but it does not
 /// contain the patch name.
 fn is_not_in_series(uri: &Uri, patch_name: &str) -> bool {
-    let path_str = uri.path().as_str();
-    let patch_path = Path::new(path_str);
+    let Some(patch_path) = uri.to_file_path() else {
+        return false;
+    };
     let Some(patches_dir) = patch_path.parent() else {
         return false;
     };
@@ -83,8 +82,7 @@ fn is_not_in_series(uri: &Uri, patch_name: &str) -> bool {
 
 /// Get the top applied patch name by reading .pc/applied-patches.
 fn get_top_applied_patch(uri: &Uri) -> Option<String> {
-    let path_str = uri.path().as_str();
-    let patch_path = Path::new(path_str);
+    let patch_path = uri.to_file_path()?;
     let patches_dir = patch_path.parent()?;
     let project_dir = patches_dir.parent()?;
     let applied_path = project_dir.join(".pc").join("applied-patches");
@@ -98,6 +96,7 @@ fn get_top_applied_patch(uri: &Uri) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     fn setup_quilt_project() -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = tempfile::tempdir().unwrap();
@@ -109,7 +108,7 @@ mod tests {
     }
 
     fn make_uri(path: &Path) -> Uri {
-        format!("file://{}", path.display()).parse().unwrap()
+        Uri::from_file_path(path).unwrap()
     }
 
     #[test]

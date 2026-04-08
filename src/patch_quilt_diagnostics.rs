@@ -3,7 +3,6 @@
 //! Warns if a patch file exists in the patches directory but is not
 //! listed in the series file.
 
-use std::path::Path;
 use tower_lsp_server::ls_types::*;
 
 /// Check if a patch file is listed in its project's series file.
@@ -40,16 +39,14 @@ pub fn get_patch_quilt_diagnostics(uri: &Uri) -> Vec<Diagnostic> {
 
 /// Extract the file name from a patch file URI.
 fn extract_patch_name(uri: &Uri) -> Option<String> {
-    let path_str = uri.path().as_str();
-    let path = Path::new(path_str);
+    let path = uri.to_file_path()?;
     let name = path.file_name()?.to_str()?;
     Some(name.to_string())
 }
 
 /// Read the series file from the same directory as the patch.
 fn read_series_file(uri: &Uri) -> Option<String> {
-    let path_str = uri.path().as_str();
-    let path = Path::new(path_str);
+    let path = uri.to_file_path()?;
     let patches_dir = path.parent()?;
     let series_path = patches_dir.join("series");
     std::fs::read_to_string(series_path).ok()
@@ -58,6 +55,7 @@ fn read_series_file(uri: &Uri) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     fn setup_patches_dir() -> (tempfile::TempDir, std::path::PathBuf) {
         let dir = tempfile::tempdir().unwrap();
@@ -67,7 +65,7 @@ mod tests {
     }
 
     fn make_uri(path: &Path) -> Uri {
-        format!("file://{}", path.display()).parse().unwrap()
+        Uri::from_file_path(path).unwrap()
     }
 
     #[test]

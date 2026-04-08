@@ -40,8 +40,9 @@ pub const COMMANDS: &[&str] = &[
 
 /// Read the list of currently applied patches from `.pc/applied-patches`.
 fn read_applied_patches(series_uri: &Uri) -> HashSet<String> {
-    let path_str = series_uri.path().as_str();
-    let series_path = Path::new(path_str);
+    let Some(series_path) = series_uri.to_file_path() else {
+        return HashSet::new();
+    };
     let Some(patches_dir) = series_path.parent() else {
         return HashSet::new();
     };
@@ -215,8 +216,7 @@ pub fn get_series_code_actions(
 /// Quilt expects to be run from the project root (parent of `patches/`).
 pub fn find_quilt_working_dir(series_uri: &str) -> Option<std::path::PathBuf> {
     let uri: Uri = series_uri.parse().ok()?;
-    let path_str = uri.path().as_str();
-    let series_path = Path::new(path_str);
+    let series_path = uri.to_file_path()?;
     let patches_dir = series_path.parent()?;
     patches_dir.parent().map(|p| p.to_path_buf())
 }
@@ -252,7 +252,7 @@ mod tests {
     }
 
     fn make_uri(path: &std::path::Path) -> Uri {
-        format!("file://{}", path.display()).parse().unwrap()
+        Uri::from_file_path(path).unwrap()
     }
 
     fn setup_quilt_project() -> (tempfile::TempDir, std::path::PathBuf, std::path::PathBuf) {

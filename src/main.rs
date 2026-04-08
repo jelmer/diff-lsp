@@ -720,8 +720,13 @@ impl LanguageServer for Backend {
                 let patch_uri: Uri = series_uri
                     .parse()
                     .map_err(|_| tower_lsp_server::jsonrpc::Error::invalid_params("invalid URI"))?;
-                let patch_path = patch_uri.path().as_str();
-                run_quilt_command(&["import", patch_path], &working_dir)
+                let patch_path = patch_uri.to_file_path().ok_or_else(|| {
+                    tower_lsp_server::jsonrpc::Error::invalid_params("invalid file URI")
+                })?;
+                let patch_path_str = patch_path.to_str().ok_or_else(|| {
+                    tower_lsp_server::jsonrpc::Error::invalid_params("non-UTF-8 path")
+                })?;
+                run_quilt_command(&["import", patch_path_str], &working_dir)
             }
             _ => {
                 return Err(tower_lsp_server::jsonrpc::Error::method_not_found());
