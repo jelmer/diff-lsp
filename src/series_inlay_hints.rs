@@ -5,7 +5,6 @@
 
 use patchkit::edit::series::SeriesFile;
 use rowan::ast::AstNode;
-use std::path::Path;
 use tower_lsp_server::ls_types::*;
 
 use crate::position::{text_range_to_lsp_range, try_lsp_range_to_text_range};
@@ -95,14 +94,14 @@ fn compute_stats(content: &str) -> (u32, u32, usize) {
 
 /// Extract the patches directory from a series file URI.
 fn patches_dir_from_uri(uri: &Uri) -> Option<std::path::PathBuf> {
-    let path_str = uri.path().as_str();
-    let path = Path::new(path_str);
+    let path = uri.to_file_path()?;
     path.parent().map(|p| p.to_path_buf())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     fn parse_series(text: &str) -> patchkit::edit::Parse<SeriesFile> {
         patchkit::edit::series::parse(text)
@@ -113,7 +112,7 @@ mod tests {
     }
 
     fn make_uri(path: &Path) -> Uri {
-        format!("file://{}", path.display()).parse().unwrap()
+        Uri::from_file_path(path).unwrap()
     }
 
     #[test]

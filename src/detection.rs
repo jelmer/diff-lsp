@@ -35,12 +35,7 @@ pub fn detect_file_kind(uri: &Uri) -> FileKind {
 }
 
 fn uri_to_path(uri: &Uri) -> Option<PathBuf> {
-    let path_str = uri.path().as_str();
-    if path_str.starts_with('/') {
-        Some(PathBuf::from(path_str))
-    } else {
-        None
-    }
+    uri.to_file_path().map(|p| p.to_path_buf())
 }
 
 fn detect_from_uri_path(path: &str) -> FileKind {

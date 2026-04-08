@@ -9,7 +9,7 @@ use patchkit::edit::lex::SyntaxKind;
 use patchkit::edit::series::SeriesFile;
 use patchkit::edit::Patch;
 use rowan::ast::AstNode;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tower_lsp_server::ls_types::*;
 
 use crate::position::try_position_to_offset;
@@ -58,7 +58,7 @@ pub fn goto_definition(
         return None;
     }
 
-    let target_uri: Uri = format!("file://{}", target_path.display()).parse().ok()?;
+    let target_uri = Uri::from_file_path(&target_path)?;
 
     Some(GotoDefinitionResponse::Scalar(Location {
         uri: target_uri,
@@ -84,8 +84,7 @@ pub fn series_goto_definition(
 
     let name = entry.name()?;
 
-    let path_str = document_uri.path().as_str();
-    let series_path = Path::new(path_str);
+    let series_path = document_uri.to_file_path()?;
     let patches_dir = series_path.parent()?;
     let target_path = patches_dir.join(&name);
 
@@ -93,7 +92,7 @@ pub fn series_goto_definition(
         return None;
     }
 
-    let target_uri: Uri = format!("file://{}", target_path.display()).parse().ok()?;
+    let target_uri = Uri::from_file_path(&target_path)?;
 
     Some(GotoDefinitionResponse::Scalar(Location {
         uri: target_uri,
@@ -108,8 +107,7 @@ pub fn series_goto_definition(
 /// 2. A git repository: a directory containing `.git`
 /// 3. Falls back to the patch file's grandparent (assuming `patches/<file>`)
 fn find_project_root(uri: &Uri) -> Option<PathBuf> {
-    let path_str = uri.path().as_str();
-    let path = Path::new(path_str);
+    let path = uri.to_file_path()?;
 
     for ancestor in path.ancestors().skip(1) {
         // Check if this directory's name is "patches" and its parent is a project root
@@ -160,7 +158,7 @@ mod tests {
 
         let text = "--- a/src/foo.rs\n+++ b/src/foo.rs\n@@ -1 +1 @@\n-old\n+new\n";
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         // Cursor on the path in +++ line (line 1, on "b/src/foo.rs")
         let result = parse_and_goto(text, 1, 6, &uri);
@@ -170,7 +168,9 @@ mod tests {
         };
         assert_eq!(
             loc.uri.to_string(),
-            format!("file://{}", src_dir.join("foo.rs").display())
+            Uri::from_file_path(src_dir.join("foo.rs"))
+                .unwrap()
+                .to_string()
         );
     }
 
@@ -184,7 +184,7 @@ mod tests {
 
         let text = "--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-old\n+new\n";
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         let result = parse_and_goto(text, 0, 6, &uri);
         assert!(result.is_some());
@@ -193,7 +193,9 @@ mod tests {
         };
         assert_eq!(
             loc.uri.to_string(),
-            format!("file://{}", dir.path().join("file.txt").display())
+            Uri::from_file_path(dir.path().join("file.txt"))
+                .unwrap()
+                .to_string()
         );
     }
 
@@ -206,7 +208,7 @@ mod tests {
 
         let text = "--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1 @@\n+line\n";
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         let result = parse_and_goto(text, 0, 6, &uri);
         assert_eq!(result, None);
@@ -221,7 +223,7 @@ mod tests {
 
         let text = "--- a/nonexistent.txt\n+++ b/nonexistent.txt\n@@ -1 +1 @@\n-old\n+new\n";
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         let result = parse_and_goto(text, 0, 6, &uri);
         assert_eq!(result, None);
@@ -236,7 +238,7 @@ mod tests {
 
         let text = "--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-old\n+new\n";
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         // Cursor on the hunk header
         let result = parse_and_goto(text, 2, 3, &uri);
@@ -258,7 +260,7 @@ mod tests {
 
         let text = "--- a/control\n+++ b/control\n@@ -1 +1 @@\n-old\n+new\n";
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         let result = parse_and_goto(text, 0, 6, &uri);
         assert!(result.is_some());
@@ -267,10 +269,9 @@ mod tests {
         };
         assert_eq!(
             loc.uri.to_string(),
-            format!(
-                "file://{}",
-                dir.path().join("debian").join("control").display()
-            )
+            Uri::from_file_path(dir.path().join("debian").join("control"))
+                .unwrap()
+                .to_string()
         );
     }
 
@@ -284,7 +285,7 @@ mod tests {
 
         let text = "--- file.txt\n+++ file.txt\n@@ -1 +1 @@\n-old\n+new\n";
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         let result = parse_and_goto(text, 0, 6, &uri);
         assert!(result.is_some());
@@ -300,7 +301,7 @@ mod tests {
 
         let text = "--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-old\n+new\n";
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         let result = parse_and_goto(text, 0, 6, &uri).unwrap();
         let GotoDefinitionResponse::Scalar(loc) = result else {
@@ -320,7 +321,7 @@ mod tests {
         std::fs::create_dir(dir.path().join(".git")).unwrap();
 
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         assert_eq!(find_project_root(&uri), Some(dir.path().to_path_buf()));
     }
@@ -333,7 +334,7 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("debian").join(".pc")).unwrap();
 
         let patch_path = patches_dir.join("test.patch");
-        let uri: Uri = format!("file://{}", patch_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&patch_path).unwrap();
 
         assert_eq!(find_project_root(&uri), Some(dir.path().join("debian")));
     }
@@ -359,7 +360,7 @@ mod tests {
         std::fs::write(patches_dir.join("a.patch"), "content").unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&series_path).unwrap();
 
         let result = parse_series_and_goto("a.patch\n", 0, 2, &uri);
         assert!(result.is_some());
@@ -368,7 +369,9 @@ mod tests {
         };
         assert_eq!(
             loc.uri.to_string(),
-            format!("file://{}", patches_dir.join("a.patch").display())
+            Uri::from_file_path(patches_dir.join("a.patch"))
+                .unwrap()
+                .to_string()
         );
     }
 
@@ -381,7 +384,7 @@ mod tests {
         std::fs::write(patches_dir.join("b.patch"), "").unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&series_path).unwrap();
 
         let result = parse_series_and_goto("a.patch\nb.patch\n", 1, 2, &uri);
         assert!(result.is_some());
@@ -390,7 +393,9 @@ mod tests {
         };
         assert_eq!(
             loc.uri.to_string(),
-            format!("file://{}", patches_dir.join("b.patch").display())
+            Uri::from_file_path(patches_dir.join("b.patch"))
+                .unwrap()
+                .to_string()
         );
     }
 
@@ -401,7 +406,7 @@ mod tests {
         std::fs::create_dir_all(&patches_dir).unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&series_path).unwrap();
 
         let result = parse_series_and_goto("missing.patch\n", 0, 2, &uri);
         assert_eq!(result, None);
@@ -414,7 +419,7 @@ mod tests {
         std::fs::create_dir_all(&patches_dir).unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&series_path).unwrap();
 
         let result = parse_series_and_goto("# comment\na.patch\n", 0, 2, &uri);
         assert_eq!(result, None);
@@ -428,7 +433,7 @@ mod tests {
         std::fs::write(patches_dir.join("a.patch"), "").unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri = Uri::from_file_path(&series_path).unwrap();
 
         let result = parse_series_and_goto("a.patch\n", 0, 0, &uri).unwrap();
         let GotoDefinitionResponse::Scalar(loc) = result else {

@@ -6,7 +6,6 @@
 use patchkit::edit::series::SeriesFile;
 use rowan::ast::AstNode;
 use std::collections::HashSet;
-use std::path::Path;
 use tower_lsp_server::ls_types::*;
 
 use crate::position::text_range_to_lsp_range;
@@ -17,8 +16,7 @@ use crate::position::text_range_to_lsp_range;
 /// For example, if the series file is at `/project/debian/patches/series`,
 /// the applied-patches file is at `/project/debian/.pc/applied-patches`.
 fn read_applied_patches(series_uri: &Uri) -> Option<Vec<String>> {
-    let path_str = series_uri.path().as_str();
-    let series_path = Path::new(path_str);
+    let series_path = series_uri.to_file_path()?;
     let patches_dir = series_path.parent()?;
 
     // .pc/ is a sibling of patches/, so go up one more level
@@ -87,8 +85,7 @@ mod tests {
 
     /// Find the `.pc/` directory for a series file URI.
     fn find_pc_dir(series_uri: &Uri) -> Option<PathBuf> {
-        let path_str = series_uri.path().as_str();
-        let series_path = Path::new(path_str);
+        let series_path = series_uri.to_file_path()?;
         let patches_dir = series_path.parent()?;
         let project_dir = patches_dir.parent()?;
         let pc_dir = project_dir.join(".pc");
@@ -118,7 +115,7 @@ mod tests {
         .unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let applied = read_applied_patches(&uri).unwrap();
         assert_eq!(applied, vec!["0001-fix.patch", "0002-feature.patch"]);
@@ -131,7 +128,7 @@ mod tests {
         std::fs::create_dir_all(&patches_dir).unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         assert!(read_applied_patches(&uri).is_none());
     }
@@ -146,7 +143,7 @@ mod tests {
         std::fs::write(pc_dir.join("applied-patches"), "").unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let applied = read_applied_patches(&uri).unwrap();
         assert!(applied.is_empty());
@@ -163,7 +160,7 @@ mod tests {
         std::fs::create_dir_all(&pc_dir).unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         assert_eq!(find_pc_dir(&uri).unwrap(), pc_dir);
     }
@@ -175,7 +172,7 @@ mod tests {
         std::fs::create_dir_all(&patches_dir).unwrap();
 
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         assert!(find_pc_dir(&uri).is_none());
     }
@@ -195,7 +192,7 @@ mod tests {
         let parsed = parse_series(text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let lenses = get_series_code_lenses(&series, text, &uri);
         assert_eq!(lenses.len(), 2);
@@ -219,7 +216,7 @@ mod tests {
         let parsed = parse_series(text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let lenses = get_series_code_lenses(&series, text, &uri);
         assert_eq!(lenses.len(), 3);
@@ -244,7 +241,7 @@ mod tests {
         let parsed = parse_series(text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let lenses = get_series_code_lenses(&series, text, &uri);
         assert_eq!(lenses.len(), 2);
@@ -262,7 +259,7 @@ mod tests {
         let parsed = parse_series(text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let lenses = get_series_code_lenses(&series, text, &uri);
         assert!(lenses.is_empty());
@@ -281,7 +278,7 @@ mod tests {
         let parsed = parse_series(text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let lenses = get_series_code_lenses(&series, text, &uri);
         // Only patch entries get lenses, not comments
@@ -306,7 +303,7 @@ mod tests {
         let parsed = parse_series(text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let lenses = get_series_code_lenses(&series, text, &uri);
         assert!(lenses.is_empty());
@@ -325,7 +322,7 @@ mod tests {
         let parsed = parse_series(text);
         let series = parsed.tree();
         let series_path = patches_dir.join("series");
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let lenses = get_series_code_lenses(&series, text, &uri);
         assert_eq!(lenses[0].range.start.line, 0);

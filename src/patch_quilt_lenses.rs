@@ -42,8 +42,7 @@ struct QuiltInfo {
 
 /// Try to find quilt context for a patch file URI.
 fn get_quilt_info(uri: &Uri) -> Option<QuiltInfo> {
-    let path_str = uri.path().as_str();
-    let patch_path = Path::new(path_str);
+    let patch_path = uri.to_file_path()?;
     let patch_name = patch_path.file_name()?.to_str()?;
 
     let patches_dir = patch_path.parent()?;
@@ -104,7 +103,7 @@ mod tests {
     }
 
     fn make_uri(path: &Path) -> Uri {
-        format!("file://{}", path.display()).parse().unwrap()
+        Uri::from_file_path(path).unwrap()
     }
 
     #[test]

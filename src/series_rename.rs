@@ -5,7 +5,6 @@
 
 use patchkit::edit::series::{PatchEntry, SeriesFile};
 use rowan::ast::AstNode;
-use std::path::Path;
 use tower_lsp_server::ls_types::*;
 
 use crate::position::{text_range_to_lsp_range, try_position_to_offset};
@@ -54,12 +53,8 @@ pub fn rename(
 
     // File rename: rename the patch file on disk
     let patches_dir = patches_dir_from_uri(uri)?;
-    let old_file_uri: Uri = format!("file://{}", patches_dir.join(&old_name).display())
-        .parse()
-        .ok()?;
-    let new_file_uri: Uri = format!("file://{}", patches_dir.join(new_name).display())
-        .parse()
-        .ok()?;
+    let old_file_uri = Uri::from_file_path(patches_dir.join(&old_name))?;
+    let new_file_uri = Uri::from_file_path(patches_dir.join(new_name))?;
 
     let rename_file = DocumentChangeOperation::Op(ResourceOp::Rename(RenameFile {
         old_uri: old_file_uri,
@@ -95,8 +90,7 @@ fn find_patch_entry_at_offset(
 
 /// Extract the patches directory from a series file URI.
 fn patches_dir_from_uri(uri: &Uri) -> Option<std::path::PathBuf> {
-    let path_str = uri.path().as_str();
-    let path = Path::new(path_str);
+    let path = uri.to_file_path()?;
     path.parent().map(|p| p.to_path_buf())
 }
 

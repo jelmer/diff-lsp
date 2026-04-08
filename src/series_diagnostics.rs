@@ -34,8 +34,7 @@ fn make_diagnostic(
 /// The series file is typically at `<project>/debian/patches/series` or
 /// `<project>/patches/series`, so the patches directory is its parent.
 fn patches_dir_from_uri(uri: &Uri) -> Option<PathBuf> {
-    let path_str = uri.path().as_str();
-    let path = Path::new(path_str);
+    let path = uri.to_file_path()?;
     path.parent().map(|p| p.to_path_buf())
 }
 
@@ -429,7 +428,7 @@ mod tests {
         let text = "a.patch\nmissing.patch\na.patch\n";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let diags = get_series_diagnostics(text, &series, &uri);
 
@@ -466,7 +465,7 @@ mod tests {
         let text = "a.patch\nb.patch\n";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri: Uri = format!("file://{}", series_path.display()).parse().unwrap();
+        let uri: Uri = Uri::from_file_path(&series_path).unwrap();
 
         let diags = get_series_diagnostics(text, &series, &uri);
         assert!(diags.is_empty());
