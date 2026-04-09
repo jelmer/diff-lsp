@@ -472,17 +472,27 @@ mod tests {
 
     #[test]
     fn test_find_quilt_working_dir() {
+        let tmp = tempfile::tempdir().unwrap();
+        let patches = tmp.path().join("debian").join("patches");
+        std::fs::create_dir_all(&patches).unwrap();
+        let series_path = patches.join("series");
+        let uri = Uri::from_file_path(&series_path).unwrap();
         assert_eq!(
-            find_quilt_working_dir("file:///project/debian/patches/series"),
-            Some(std::path::PathBuf::from("/project/debian"))
+            find_quilt_working_dir(&uri.to_string()),
+            Some(tmp.path().join("debian"))
         );
     }
 
     #[test]
     fn test_find_quilt_working_dir_simple() {
+        let tmp = tempfile::tempdir().unwrap();
+        let patches = tmp.path().join("patches");
+        std::fs::create_dir_all(&patches).unwrap();
+        let series_path = patches.join("series");
+        let uri = Uri::from_file_path(&series_path).unwrap();
         assert_eq!(
-            find_quilt_working_dir("file:///project/patches/series"),
-            Some(std::path::PathBuf::from("/project"))
+            find_quilt_working_dir(&uri.to_string()),
+            Some(tmp.path().to_path_buf())
         );
     }
 

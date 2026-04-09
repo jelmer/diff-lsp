@@ -402,16 +402,24 @@ mod tests {
 
     #[test]
     fn test_patches_dir_from_uri() {
-        let uri: Uri = "file:///project/debian/patches/series".parse().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let patches = tmp.path().join("debian").join("patches");
+        std::fs::create_dir_all(&patches).unwrap();
+        let series_path = patches.join("series");
+        let uri = Uri::from_file_path(&series_path).unwrap();
         let dir = patches_dir_from_uri(&uri).unwrap();
-        assert_eq!(dir, PathBuf::from("/project/debian/patches"));
+        assert_eq!(dir, patches);
     }
 
     #[test]
     fn test_patches_dir_from_uri_nested() {
-        let uri: Uri = "file:///a/b/c/series".parse().unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let nested = tmp.path().join("a").join("b").join("c");
+        std::fs::create_dir_all(&nested).unwrap();
+        let series_path = nested.join("series");
+        let uri = Uri::from_file_path(&series_path).unwrap();
         let dir = patches_dir_from_uri(&uri).unwrap();
-        assert_eq!(dir, PathBuf::from("/a/b/c"));
+        assert_eq!(dir, nested);
     }
 
     // --- Integration tests with get_series_diagnostics ---
