@@ -102,8 +102,16 @@ mod tests {
         patchkit::edit::series::parse(text)
     }
 
-    fn dummy_uri() -> Uri {
-        "file:///project/debian/patches/series".parse().unwrap()
+    fn dummy_patches_dir() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let patches = dir.path().join("debian").join("patches");
+        std::fs::create_dir_all(&patches).unwrap();
+        dir
+    }
+
+    fn dummy_uri(patches_dir: &std::path::Path) -> Uri {
+        let series_path = patches_dir.join("debian").join("patches").join("series");
+        Uri::from_file_path(series_path).unwrap()
     }
 
     // --- prepare_rename tests ---
@@ -170,7 +178,9 @@ mod tests {
         let text = "a.patch\nb.patch\n";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri = dummy_uri();
+        let dir = dummy_patches_dir();
+        let uri = dummy_uri(dir.path());
+        let patches_dir = dir.path().join("debian").join("patches");
 
         let edit = rename(&series, text, Position::new(0, 2), "renamed.patch", &uri).unwrap();
 
@@ -196,16 +206,12 @@ mod tests {
         }
 
         // Second op: file rename
+        let expected_old = Uri::from_file_path(patches_dir.join("a.patch")).unwrap();
+        let expected_new = Uri::from_file_path(patches_dir.join("renamed.patch")).unwrap();
         match &ops[1] {
             DocumentChangeOperation::Op(ResourceOp::Rename(rename)) => {
-                assert_eq!(
-                    rename.old_uri.to_string(),
-                    "file:///project/debian/patches/a.patch"
-                );
-                assert_eq!(
-                    rename.new_uri.to_string(),
-                    "file:///project/debian/patches/renamed.patch"
-                );
+                assert_eq!(rename.old_uri, expected_old);
+                assert_eq!(rename.new_uri, expected_new);
             }
             _ => panic!("expected Rename op"),
         }
@@ -216,7 +222,8 @@ mod tests {
         let text = "a.patch\n";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri = dummy_uri();
+        let dir = dummy_patches_dir();
+        let uri = dummy_uri(dir.path());
 
         let result = rename(&series, text, Position::new(0, 2), "a.patch", &uri);
         assert_eq!(result, None);
@@ -227,7 +234,8 @@ mod tests {
         let text = "# comment\na.patch\n";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri = dummy_uri();
+        let dir = dummy_patches_dir();
+        let uri = dummy_uri(dir.path());
 
         let result = rename(&series, text, Position::new(0, 2), "new.patch", &uri);
         assert_eq!(result, None);
@@ -238,7 +246,8 @@ mod tests {
         let text = "a.patch\nb.patch\n";
         let parsed = parse_series(text);
         let series = parsed.tree();
-        let uri = dummy_uri();
+        let dir = dummy_patches_dir();
+        let uri = dummy_uri(dir.path());
 
         let edit = rename(&series, text, Position::new(1, 2), "c.patch", &uri).unwrap();
         let DocumentChanges::Operations(ops) = edit.document_changes.unwrap() else {
