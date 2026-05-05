@@ -16,7 +16,6 @@ mod folding;
 mod goto_definition;
 mod highlights;
 mod hover;
-mod inlay_hints;
 mod patch_quilt_actions;
 mod patch_quilt_diagnostics;
 mod patch_quilt_lenses;
@@ -405,15 +404,7 @@ impl LanguageServer for Backend {
         };
 
         let result = match &file_info.parsed {
-            ParsedFile::Patch(parsed) => {
-                let patch = parsed.tree();
-                let hints = inlay_hints::get_inlay_hints(&patch, &file_info.text, range);
-                if hints.is_empty() {
-                    None
-                } else {
-                    Some(hints)
-                }
-            }
+            ParsedFile::Patch(_) => None,
             ParsedFile::Series(parsed) => {
                 let series = parsed.tree();
                 let hints = series_inlay_hints::get_series_inlay_hints(
