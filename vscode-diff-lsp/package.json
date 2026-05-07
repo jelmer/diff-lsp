@@ -2,7 +2,7 @@
   "name": "vscode-diff-lsp",
   "displayName": "Diff/Patch Language Support",
   "description": "Language Server Protocol support for diff/patch files and quilt series",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "jelmer",
   "license": "Apache-2.0",
   "repository": {

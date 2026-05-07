@@ -537,7 +537,7 @@ mod tests {
             .unwrap();
         assert_eq!(remove.kind, Some(CodeActionKind::REFACTOR));
         // Should have an edit, not a command
-        assert_eq!(remove.edit.is_some(), true);
+        assert!(remove.edit.is_some());
         assert_eq!(remove.command, None);
         let edit = remove.edit.as_ref().unwrap();
         let changes = edit.changes.as_ref().unwrap();
