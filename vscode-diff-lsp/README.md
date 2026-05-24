@@ -1,60 +1,42 @@
 # Diff/Patch Language Support for VS Code
 
-Language Server Protocol support for **diff/patch files** and **quilt series files**, powered by [diff-lsp](https://github.com/jelmer/diff-lsp).
+A VS Code client for [diff-lsp](https://github.com/jelmer/diff-lsp), a
+language server for unified diff/patch files and quilt series files.
 
-## Features
+## What it does
 
-### Diff/Patch Files (`.patch`, `.diff`)
+In `.patch` and `.diff` files it reports parse errors and warns about
+inconsistencies like hunk counts that don't match the header or
+duplicate file paths. Code actions let you remove, reverse, split, or
+fix the line counts of a hunk. The `---` and `+++` headers turn into
+clickable links and support go-to-definition. Hover shows hunk
+statistics, and there's the usual scaffolding (document symbols,
+folding, selection ranges, inlay hints, semantic highlighting).
 
-- **Diagnostics** - parse errors, hunk line count mismatches, duplicate file paths
-- **Code actions** - remove hunk, reverse hunk, split hunk, fix hunk line counts
-- **Go-to-definition** - jump to files referenced in patch headers
-- **Document symbols** - outline of patched files and hunks
-- **Document links** - clickable file paths in patch headers
-- **Hover** - hunk statistics (additions, deletions, context lines)
-- **Semantic highlighting** - file headers, hunk headers, added/deleted/context lines
-- **Folding** - collapse/expand hunks and file sections
-- **Inlay hints** and **selection ranges**
-
-### Quilt Series Files (`series`, `series.conf`)
-
-- **Diagnostics** - duplicate entries, missing patch files, unlisted patches
-- **Code actions** - quilt push, pop, delete, refresh, new, import
-- **Go-to-definition** - jump to patch files listed in the series
-- **Document symbols** - outline of patch entries
-- **Document links** - clickable patch filenames
-- **Hover** - patch metadata
-- **Completions** - patch filename suggestions from the patches directory
-- **Rename** - rename a patch across the series file and on disk
-- **Reorder** - move patches up/down in the series
-- **Semantic highlighting**, **folding**, **inlay hints**
+In quilt `series` files it warns about duplicates, patches listed but
+not present on disk, and patch files in the directory that aren't
+listed. Code actions wrap the common quilt commands — push, pop,
+delete, refresh, new, import. Patch entries can be renamed (the file
+on disk is renamed too) or reordered up and down. Completions suggest
+patches not yet in the series. Hover shows the patch description
+along with file/line statistics.
 
 ## Installation
 
-### From a release
-
-Download the `.vsix` file for your platform from the
-[releases page](https://github.com/jelmer/diff-lsp/releases) and install it:
+Grab the `.vsix` for your platform from the
+[releases page](https://github.com/jelmer/diff-lsp/releases) and:
 
 ```
 code --install-extension vscode-diff-lsp-<platform>.vsix
 ```
 
-Platform-specific packages bundle the `diff-lsp` binary. The universal package
-requires `diff-lsp` to be available in your `PATH`.
+The platform-specific packages bundle the `diff-lsp` binary; the
+universal package expects `diff-lsp` on your `PATH`.
 
-### From source
-
-```sh
-cd vscode-diff-lsp
-npm install
-npm run package
-code --install-extension vscode-diff-lsp-0.1.0.vsix
-```
-
-This requires building the `diff-lsp` binary separately (`cargo build --release`
-in the repository root) and either placing it in your `PATH` or setting the
-`diff.serverPath` setting.
+To build from source, run `npm install && npm run package` in this
+directory. You'll need to build the server separately (`cargo build
+--release` in the repo root) and either put it on your `PATH` or
+point `diff.serverPath` at it.
 
 ## Settings
 

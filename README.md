@@ -1,30 +1,21 @@
 # diff-lsp
 
-A Language Server Protocol (LSP) implementation for diff/patch files and
-quilt series files.
+A language server for unified diff/patch files and quilt series files.
 
-## Features
+For patch files it reports diagnostics (parse errors, hunk count
+mismatches, duplicate file paths), offers code actions to remove,
+reverse, split, or fix the line counts of a hunk, and provides hover
+stats, document symbols, document links, folding, selection ranges,
+semantic highlighting and inlay hints. Go-to-definition jumps from the
+`---`/`+++` header to the actual source file.
 
-### Patch/diff files
-
-- **Diagnostics**: parse errors, hunk line count mismatches, duplicate file paths
-- **Code actions**: remove hunk, reverse hunk, split hunk, fix hunk line counts
-- **Navigation**: go-to-definition for referenced files, document symbols, document links
-- **Hover**: hunk statistics (additions, deletions, context lines)
-- **Semantic highlighting**: file headers, hunk headers, added/deleted/context lines
-- **Folding**: collapse/expand hunks and file sections
-- **Inlay hints** and **selection ranges**
-
-### Quilt series files
-
-- **Diagnostics**: duplicate entries, missing patch files, unlisted patches
-- **Code actions**: quilt push/pop/delete/refresh/new/import
-- **Navigation**: go-to-definition for patch files, document symbols, document links
-- **Hover**: patch metadata
-- **Completions**: patch name suggestions
-- **Rename**: rename patches throughout the series
-- **Reorder**: move patches up/down in the series
-- **Semantic highlighting**, **folding**, **inlay hints**
+For quilt series files it warns about duplicate entries, missing
+patches and patches present in the directory but not listed in the
+series. Code actions wrap the common quilt commands (push, pop,
+delete, refresh, new, import). Patch entries can be reordered up and
+down or renamed across the series and on disk, and completions
+suggest patches sitting in the directory that haven't been added yet.
+Hover shows the patch description and change statistics.
 
 ## Building
 
@@ -32,30 +23,12 @@ quilt series files.
 cargo build --release
 ```
 
-The binary will be at `target/release/diff-lsp`.
-
 ## Editor integration
 
-### VS Code
+For VS Code, see [vscode-diff-lsp/](vscode-diff-lsp/) — `npm install`
+then `npm run package` produces a `.vsix` you can install.
 
-Install the extension from `vscode-diff-lsp/`:
-
-```sh
-cd vscode-diff-lsp
-npm install
-npm run package
-```
-
-Then install the resulting `.vsix` file in VS Code.
-
-### Vim/Neovim (coc.nvim)
-
-Install the plugin from `coc-diff/`:
-
-```sh
-cd coc-diff
-npm install
-```
+For coc.nvim, see [coc-diff/](coc-diff/), or install it from npm.
 
 ## License
 
