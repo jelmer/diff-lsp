@@ -37,7 +37,6 @@ pub fn get_patch_quilt_diagnostics(uri: &Uri) -> Vec<Diagnostic> {
     }]
 }
 
-/// Extract the file name from a patch file URI.
 fn extract_patch_name(uri: &Uri) -> Option<String> {
     let path = uri.to_file_path()?;
     let name = path.file_name()?.to_str()?;

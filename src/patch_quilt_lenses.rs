@@ -40,7 +40,6 @@ struct QuiltInfo {
     is_top: bool,
 }
 
-/// Try to find quilt context for a patch file URI.
 fn get_quilt_info(uri: &Uri) -> Option<QuiltInfo> {
     let patch_path = uri.to_file_path()?;
     let patch_name = patch_path.file_name()?.to_str()?;

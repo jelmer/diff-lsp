@@ -41,19 +41,13 @@ mod symbols;
 use detection::FileKind;
 use position::try_lsp_range_to_text_range;
 
-/// Parsed content for an open file.
 enum ParsedFile {
-    /// A patch/diff file.
     Patch(patchkit::edit::Parse<patchkit::edit::Patch>),
-    /// A quilt series file.
     Series(patchkit::edit::Parse<patchkit::edit::series::SeriesFile>),
 }
 
-/// Information about an open file.
 struct FileInfo {
-    /// The current source text.
     text: String,
-    /// The parsed content.
     parsed: ParsedFile,
 }
 

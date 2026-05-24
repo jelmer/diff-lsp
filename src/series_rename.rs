@@ -77,7 +77,6 @@ pub fn rename(
     })
 }
 
-/// Find the PatchEntry at a given byte offset.
 fn find_patch_entry_at_offset(
     series: &SeriesFile,
     offset: text_size::TextSize,
@@ -88,7 +87,6 @@ fn find_patch_entry_at_offset(
     })
 }
 
-/// Extract the patches directory from a series file URI.
 fn patches_dir_from_uri(uri: &Uri) -> Option<std::path::PathBuf> {
     let path = uri.to_file_path()?;
     path.parent().map(|p| p.to_path_buf())

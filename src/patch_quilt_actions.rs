@@ -53,7 +53,6 @@ pub fn get_patch_quilt_actions(uri: &Uri) -> Vec<CodeAction> {
     actions
 }
 
-/// Extract the file name from a URI.
 fn extract_patch_name(uri: &Uri) -> Option<String> {
     let path = uri.to_file_path()?;
     path.file_name()?.to_str().map(|s| s.to_string())

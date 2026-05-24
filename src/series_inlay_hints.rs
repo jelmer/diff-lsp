@@ -71,7 +71,6 @@ pub fn get_series_inlay_hints(
     hints
 }
 
-/// Compute change statistics from patch content.
 fn compute_stats(content: &str) -> (u32, u32, usize) {
     let parsed = patchkit::edit::parse(content);
     let patch = parsed.tree();
@@ -92,7 +91,6 @@ fn compute_stats(content: &str) -> (u32, u32, usize) {
     (additions, deletions, file_count)
 }
 
-/// Extract the patches directory from a series file URI.
 fn patches_dir_from_uri(uri: &Uri) -> Option<std::path::PathBuf> {
     let path = uri.to_file_path()?;
     path.parent().map(|p| p.to_path_buf())

@@ -39,7 +39,6 @@ pub fn get_series_completions(series: &SeriesFile, uri: &Uri) -> Vec<CompletionI
         .collect()
 }
 
-/// Extract the patches directory from a series file URI.
 fn patches_dir_from_uri(uri: &Uri) -> Option<std::path::PathBuf> {
     let path = uri.to_file_path()?;
     path.parent().map(|p| p.to_path_buf())
