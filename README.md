@@ -23,6 +23,30 @@ Hover shows the patch description and change statistics.
 cargo build --release
 ```
 
+The binary will be at `target/release/diff-lsp`.
+
+## SCIP index generation
+
+The `scip` subcommand emits a [SCIP](https://github.com/sourcegraph/scip)
+index recording the cross-file references in patch and quilt series files. In
+patch files the source paths in `---`/`+++` headers reference the modified
+files; in series files each entry references a patch file.
+
+The index also carries the diagnostics that the language server reports for
+each file (parse errors, hunk line-count mismatches, duplicate paths, series
+problems, ...), attached to occurrences at their ranges.
+
+```sh
+diff-lsp scip [-o OUTPUT] FILE...
+```
+
+Output defaults to `index.scip`. Paths are recorded relative to the current
+working directory, which is taken as the project root.
+
+This subcommand is gated behind the `scip` Cargo feature, which is enabled by
+default. Build with `--no-default-features` to drop it (and the `scip` and
+`protobuf` dependencies).
+
 ## Editor integration
 
 For VS Code, see [vscode-diff-lsp/](vscode-diff-lsp/) — `npm install`

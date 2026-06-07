@@ -20,6 +20,8 @@ mod patch_quilt_actions;
 mod patch_quilt_diagnostics;
 mod patch_quilt_lenses;
 mod position;
+#[cfg(feature = "scip")]
+mod scip;
 mod selection_ranges;
 mod semantic;
 mod series_code_actions;
@@ -731,8 +733,98 @@ impl LanguageServer for Backend {
     }
 }
 
-#[tokio::main]
-async fn main() {
+fn print_usage() {
+    eprintln!(
+        "Usage:\n  \
+         diff-lsp                       run the language server (reads/writes stdio)"
+    );
+    #[cfg(feature = "scip")]
+    eprintln!(
+        "  diff-lsp scip [-o OUTPUT] FILE...  generate a SCIP index for the given patch/series files\n\n\
+         The scip subcommand writes a binary SCIP index (default: index.scip).\n\
+         Paths in the index are made relative to the current working directory."
+    );
+}
+
+/// Run the `scip` subcommand.
+///
+/// Parses `[-o OUTPUT] FILE...` and writes a SCIP index covering the given
+/// patch and quilt series files.
+#[cfg(feature = "scip")]
+fn run_scip(args: &[String]) -> std::process::ExitCode {
+    let mut output = std::path::PathBuf::from("index.scip");
+    let mut inputs: Vec<std::path::PathBuf> = Vec::new();
+
+    let mut iter = args.iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "-o" | "--output" => {
+                let Some(value) = iter.next() else {
+                    eprintln!("error: {arg} requires an argument");
+                    return std::process::ExitCode::FAILURE;
+                };
+                output = std::path::PathBuf::from(value);
+            }
+            "-h" | "--help" => {
+                print_usage();
+                return std::process::ExitCode::SUCCESS;
+            }
+            other if other.starts_with('-') => {
+                eprintln!("error: unknown option {other}");
+                return std::process::ExitCode::FAILURE;
+            }
+            other => inputs.push(std::path::PathBuf::from(other)),
+        }
+    }
+
+    if inputs.is_empty() {
+        eprintln!("error: no input files given");
+        print_usage();
+        return std::process::ExitCode::FAILURE;
+    }
+
+    let project_root = match std::env::current_dir() {
+        Ok(dir) => dir,
+        Err(err) => {
+            eprintln!("error: cannot determine current directory: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+
+    let index = match scip::build_index(&inputs, &project_root) {
+        Ok(index) => index,
+        Err(err) => {
+            eprintln!("error: failed to build index: {err}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
+
+    let mut references = 0usize;
+    let mut diagnostics = 0usize;
+    for doc in &index.documents {
+        for occ in &doc.occurrences {
+            if occ.diagnostics.is_empty() {
+                references += 1;
+            } else {
+                diagnostics += occ.diagnostics.len();
+            }
+        }
+    }
+
+    if let Err(err) = scip::write_message_to_file(&output, index) {
+        eprintln!("error: failed to write {}: {err}", output.display());
+        return std::process::ExitCode::FAILURE;
+    }
+
+    eprintln!(
+        "wrote {} ({} document(s), {references} reference(s), {diagnostics} diagnostic(s))",
+        output.display(),
+        inputs.len()
+    );
+    std::process::ExitCode::SUCCESS
+}
+
+async fn run_lsp() {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .init();
@@ -742,4 +834,41 @@ async fn main() {
 
     let (service, socket) = LspService::new(Backend::new);
     Server::new(stdin, stdout, socket).serve(service).await;
+}
+
+fn main() -> std::process::ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+
+    match args.first().map(String::as_str) {
+        #[cfg(feature = "scip")]
+        Some("scip") => run_scip(&args[1..]),
+        Some("-h") | Some("--help") => {
+            print_usage();
+            std::process::ExitCode::SUCCESS
+        }
+        Some(other) if other.starts_with('-') => {
+            // No options are accepted before the LSP server mode; treat
+            // unknown leading options as an error rather than silently
+            // starting the server.
+            eprintln!("error: unknown option {other}");
+            print_usage();
+            std::process::ExitCode::FAILURE
+        }
+        Some(other) => {
+            eprintln!("error: unknown subcommand {other}");
+            print_usage();
+            std::process::ExitCode::FAILURE
+        }
+        None => {
+            let runtime = match tokio::runtime::Runtime::new() {
+                Ok(rt) => rt,
+                Err(err) => {
+                    eprintln!("error: failed to start tokio runtime: {err}");
+                    return std::process::ExitCode::FAILURE;
+                }
+            };
+            runtime.block_on(run_lsp());
+            std::process::ExitCode::SUCCESS
+        }
+    }
 }
