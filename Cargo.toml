@@ -10,6 +10,11 @@ repository = "https://github.com/jelmer/diff-lsp"
 keywords = ["lsp", "diff", "patch", "language-server"]
 categories = ["development-tools", "text-editors"]
 
+[features]
+default = ["scip"]
+# Enable the `diff-lsp scip` subcommand that generates a SCIP index.
+scip = ["dep:scip", "dep:protobuf"]
+
 [dependencies]
 patchkit = "0.2.7"
 rowan = "0.16.1"
@@ -19,10 +24,10 @@ tower-lsp-server = "0.23"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
-scip = "0.8.1"
+scip = { version = "0.8.1", optional = true }
+protobuf = { version = "3", optional = true }
 
 [dev-dependencies]
-protobuf = "3"
 tempfile = "3"
 
 [[bin]]

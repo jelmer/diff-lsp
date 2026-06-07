@@ -39,6 +39,10 @@ diff-lsp scip [-o OUTPUT] FILE...
 Output defaults to `index.scip`. Paths are recorded relative to the current
 working directory, which is taken as the project root.
 
+This subcommand is gated behind the `scip` Cargo feature, which is enabled by
+default. Build with `--no-default-features` to drop it (and the `scip` and
+`protobuf` dependencies).
+
 ## Editor integration
 
 For VS Code, see [vscode-diff-lsp/](vscode-diff-lsp/) — `npm install`

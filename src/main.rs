@@ -20,6 +20,7 @@ mod patch_quilt_actions;
 mod patch_quilt_diagnostics;
 mod patch_quilt_lenses;
 mod position;
+#[cfg(feature = "scip")]
 mod scip;
 mod selection_ranges;
 mod semantic;
@@ -735,8 +736,11 @@ impl LanguageServer for Backend {
 fn print_usage() {
     eprintln!(
         "Usage:\n  \
-         diff-lsp                       run the language server (reads/writes stdio)\n  \
-         diff-lsp scip [-o OUTPUT] FILE...  generate a SCIP index for the given patch/series files\n\n\
+         diff-lsp                       run the language server (reads/writes stdio)"
+    );
+    #[cfg(feature = "scip")]
+    eprintln!(
+        "  diff-lsp scip [-o OUTPUT] FILE...  generate a SCIP index for the given patch/series files\n\n\
          The scip subcommand writes a binary SCIP index (default: index.scip).\n\
          Paths in the index are made relative to the current working directory."
     );
@@ -746,6 +750,7 @@ fn print_usage() {
 ///
 /// Parses `[-o OUTPUT] FILE...` and writes a SCIP index covering the given
 /// patch and quilt series files.
+#[cfg(feature = "scip")]
 fn run_scip(args: &[String]) -> std::process::ExitCode {
     let mut output = std::path::PathBuf::from("index.scip");
     let mut inputs: Vec<std::path::PathBuf> = Vec::new();
@@ -825,6 +830,7 @@ fn main() -> std::process::ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
     match args.first().map(String::as_str) {
+        #[cfg(feature = "scip")]
         Some("scip") => run_scip(&args[1..]),
         Some("-h") | Some("--help") => {
             print_usage();
