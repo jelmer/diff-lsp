@@ -346,11 +346,16 @@ fn resolve_against_root(project_root: &Path, clean: &str) -> Option<PathBuf> {
 
 /// Compute a path relative to `root`, falling back to the original path's
 /// string form if it is not under `root`.
+///
+/// SCIP paths always use forward slashes, so on platforms with a different
+/// separator the result is normalised accordingly.
 fn relative_path(root: &Path, path: &Path) -> String {
-    path.strip_prefix(root)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .into_owned()
+    let rel = path.strip_prefix(root).unwrap_or(path).to_string_lossy();
+    if std::path::MAIN_SEPARATOR == '/' {
+        rel.into_owned()
+    } else {
+        rel.replace(std::path::MAIN_SEPARATOR, "/")
+    }
 }
 
 /// Convert a filesystem path to a `file://` URI string for metadata.
