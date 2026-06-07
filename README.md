@@ -32,6 +32,10 @@ index recording the cross-file references in patch and quilt series files. In
 patch files the source paths in `---`/`+++` headers reference the modified
 files; in series files each entry references a patch file.
 
+The index also carries the diagnostics that the language server reports for
+each file (parse errors, hunk line-count mismatches, duplicate paths, series
+problems, ...), attached to occurrences at their ranges.
+
 ```sh
 diff-lsp scip [-o OUTPUT] FILE...
 ```

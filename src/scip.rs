@@ -15,13 +15,15 @@
 use std::path::{Path, PathBuf};
 
 use ::scip::types::{
-    Document, Index, Metadata, Occurrence, SymbolInformation, SymbolRole, TextEncoding, ToolInfo,
+    Diagnostic, Document, Index, Metadata, Occurrence, Severity, SymbolInformation, SymbolRole,
+    TextEncoding, ToolInfo,
 };
 use patchkit::edit::lex::SyntaxKind;
 use patchkit::edit::series::SeriesFile;
 use patchkit::edit::Patch;
 use rowan::ast::AstNode;
 use text_size::TextRange;
+use tower_lsp_server::ls_types::{DiagnosticSeverity, NumberOrString, Range};
 
 use crate::detection::{self, FileKind};
 
@@ -71,24 +73,43 @@ fn build_document(path: &Path, text: &str, project_root: &Path) -> Document {
     match kind {
         FileKind::Patch => {
             let parsed = patchkit::edit::parse(text);
-            collect_patch_references(
-                &parsed.tree(),
-                text,
-                project_root,
-                &mut occurrences,
-                &mut symbols,
-            );
+            let patch = parsed.tree();
+            collect_patch_references(&patch, text, project_root, &mut occurrences, &mut symbols);
+            let mut diagnostics = crate::diagnostics::get_diagnostics(text, &parsed);
+            diagnostics.extend(crate::patch_quilt_diagnostics::get_patch_quilt_diagnostics(
+                &path_to_lsp_uri(path),
+            ));
+            push_diagnostics(diagnostics, &mut occurrences);
         }
         FileKind::Series => {
             let parsed = patchkit::edit::series::parse(text);
+            let series = parsed.tree();
             collect_series_references(
-                &parsed.tree(),
+                &series,
                 text,
                 path,
                 project_root,
                 &mut occurrences,
                 &mut symbols,
             );
+            let mut diagnostics: Vec<_> = parsed
+                .positioned_errors()
+                .iter()
+                .map(|e| tower_lsp_server::ls_types::Diagnostic {
+                    range: crate::position::text_range_to_lsp_range(text, e.position),
+                    severity: Some(DiagnosticSeverity::ERROR),
+                    code: Some(NumberOrString::String("parse-error".to_string())),
+                    source: Some("diff-lsp".to_string()),
+                    message: e.message.clone(),
+                    ..Default::default()
+                })
+                .collect();
+            diagnostics.extend(crate::series_diagnostics::get_series_diagnostics(
+                text,
+                &series,
+                &path_to_lsp_uri(path),
+            ));
+            push_diagnostics(diagnostics, &mut occurrences);
         }
     }
 
@@ -181,6 +202,49 @@ fn push_reference(text: &str, range: TextRange, symbol: &str, occurrences: &mut 
     occurrences.push(occ);
 }
 
+/// Append a diagnostic-carrying occurrence for each LSP diagnostic.
+///
+/// SCIP attaches diagnostics to occurrences, so each diagnostic becomes a
+/// symbol-less occurrence whose range is the diagnostic's range.
+fn push_diagnostics(
+    diagnostics: Vec<tower_lsp_server::ls_types::Diagnostic>,
+    occurrences: &mut Vec<Occurrence>,
+) {
+    for diag in diagnostics {
+        let mut occ = Occurrence::new();
+        occ.range = lsp_range_to_scip_range(diag.range);
+        occ.diagnostics = vec![scip_diagnostic(diag)];
+        occurrences.push(occ);
+    }
+}
+
+/// Convert an LSP [`Diagnostic`](tower_lsp_server::ls_types::Diagnostic) to a
+/// SCIP [`Diagnostic`].
+fn scip_diagnostic(diag: tower_lsp_server::ls_types::Diagnostic) -> Diagnostic {
+    let mut out = Diagnostic::new();
+    out.severity = lsp_severity_to_scip(diag.severity).into();
+    out.message = diag.message;
+    if let Some(code) = diag.code {
+        out.code = match code {
+            NumberOrString::Number(n) => n.to_string(),
+            NumberOrString::String(s) => s,
+        };
+    }
+    out.source = diag.source.unwrap_or_default();
+    out
+}
+
+/// Map an LSP diagnostic severity to a SCIP [`Severity`].
+fn lsp_severity_to_scip(severity: Option<DiagnosticSeverity>) -> Severity {
+    match severity {
+        Some(DiagnosticSeverity::ERROR) => Severity::Error,
+        Some(DiagnosticSeverity::WARNING) => Severity::Warning,
+        Some(DiagnosticSeverity::INFORMATION) => Severity::Information,
+        Some(DiagnosticSeverity::HINT) => Severity::Hint,
+        _ => Severity::UnspecifiedSeverity,
+    }
+}
+
 /// Append a [`SymbolInformation`] for `symbol` once per distinct symbol.
 fn push_symbol(
     symbol: &str,
@@ -235,6 +299,21 @@ fn escape_descriptor(name: &str) -> String {
 fn scip_range(text: &str, range: TextRange) -> Vec<i32> {
     let start = crate::position::offset_to_position(text, range.start());
     let end = crate::position::offset_to_position(text, range.end());
+    positions_to_scip_range(start, end)
+}
+
+/// Convert an LSP [`Range`] to a SCIP range.
+fn lsp_range_to_scip_range(range: Range) -> Vec<i32> {
+    positions_to_scip_range(range.start, range.end)
+}
+
+/// Build a SCIP range vector from start and end LSP positions, using the
+/// three-element `[line, startChar, endChar]` form when both ends are on the
+/// same line.
+fn positions_to_scip_range(
+    start: tower_lsp_server::ls_types::Position,
+    end: tower_lsp_server::ls_types::Position,
+) -> Vec<i32> {
     if start.line == end.line {
         vec![
             start.line as i32,
@@ -349,6 +428,79 @@ mod tests {
         let doc = &index.documents[0];
         assert_eq!(doc.occurrences.len(), 0);
         assert_eq!(doc.symbols.len(), 0);
+    }
+
+    #[test]
+    fn test_patch_diagnostics_emitted_as_occurrences() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+
+        // The new side declares one added line but the body has two,
+        // producing a single hunk-line-count-mismatch warning (the old side
+        // declares zero and has zero, so it matches).
+        let patch = write(
+            root,
+            "patches/bad.patch",
+            "--- a/file.txt\n+++ b/file.txt\n@@ -0,0 +1 @@\n+one\n+two\n",
+        );
+
+        let index = build_index(&[patch], root).unwrap();
+        let doc = &index.documents[0];
+
+        let diag_occs: Vec<_> = doc
+            .occurrences
+            .iter()
+            .filter(|o| !o.diagnostics.is_empty())
+            .collect();
+        assert_eq!(diag_occs.len(), 1);
+        let diag = &diag_occs[0].diagnostics[0];
+        assert_eq!(diag.code, "hunk-line-count-mismatch");
+        assert_eq!(diag.source, "diff-lsp");
+        assert_eq!(diag.severity, Severity::Warning.into());
+        // The diagnostic occurrence carries no symbol.
+        assert!(diag_occs[0].symbol.is_empty());
+    }
+
+    #[test]
+    fn test_series_parse_error_diagnostic() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let patches = root.join("debian/patches");
+        std::fs::create_dir_all(&patches).unwrap();
+        // Listed twice: a duplicate-entry diagnostic.
+        std::fs::write(patches.join("a.patch"), "").unwrap();
+        let series = write(root, "debian/patches/series", "a.patch\na.patch\n");
+
+        let index = build_index(&[series], root).unwrap();
+        let doc = &index.documents[0];
+        let codes: Vec<_> = doc
+            .occurrences
+            .iter()
+            .flat_map(|o| o.diagnostics.iter())
+            .map(|d| d.code.clone())
+            .collect();
+        assert!(
+            codes.contains(&"duplicate-series-entry".to_string()),
+            "{codes:?}"
+        );
+    }
+
+    #[test]
+    fn test_clean_patch_has_no_diagnostics() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        std::fs::create_dir(root.join(".git")).unwrap();
+        write(root, "file.txt", "hello");
+        let patch = write(
+            root,
+            "patches/ok.patch",
+            "--- a/file.txt\n+++ b/file.txt\n@@ -1 +1 @@\n-old\n+new\n",
+        );
+
+        let index = build_index(&[patch], root).unwrap();
+        let doc = &index.documents[0];
+        assert!(doc.occurrences.iter().all(|o| o.diagnostics.is_empty()));
     }
 
     #[test]

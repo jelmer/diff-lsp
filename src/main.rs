@@ -799,7 +799,17 @@ fn run_scip(args: &[String]) -> std::process::ExitCode {
         }
     };
 
-    let occurrences: usize = index.documents.iter().map(|d| d.occurrences.len()).sum();
+    let mut references = 0usize;
+    let mut diagnostics = 0usize;
+    for doc in &index.documents {
+        for occ in &doc.occurrences {
+            if occ.diagnostics.is_empty() {
+                references += 1;
+            } else {
+                diagnostics += occ.diagnostics.len();
+            }
+        }
+    }
 
     if let Err(err) = scip::write_message_to_file(&output, index) {
         eprintln!("error: failed to write {}: {err}", output.display());
@@ -807,7 +817,7 @@ fn run_scip(args: &[String]) -> std::process::ExitCode {
     }
 
     eprintln!(
-        "wrote {} ({} document(s), {occurrences} reference(s))",
+        "wrote {} ({} document(s), {references} reference(s), {diagnostics} diagnostic(s))",
         output.display(),
         inputs.len()
     );
